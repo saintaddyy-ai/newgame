@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { state } from '../state.js';
-import { stopBeat, blip } from '../audio.js';
+import { stopMusic, blip } from '../audio.js';
 
 const MOM = {
   promise: 'Ты пообещал маме всё изменить.',
@@ -20,7 +20,7 @@ export class EndScene extends Phaser.Scene {
   }
 
   create() {
-    stopBeat();
+    stopMusic();
     this.cameras.main.fadeIn(800, 7, 6, 13);
     this.add.rectangle(0, 0, 960, 540, 0x07060d).setOrigin(0);
 
@@ -34,6 +34,8 @@ export class EndScene extends Phaser.Scene {
     const rows = [
       MOM[f.momTalk],
       track && `Твой первый трек — «${track.title}».`,
+      track && (track.voice ? `Ты зачитал его сам. Подача: ${track.score}%.` : 'Ты записал его без голоса.'),
+      track && 'Демка лежит на компе Дэна — её можно переслушать.',
       `Собрано строчек: ${state.lines.length}.`,
       f.kidTalked && 'Пацаны во дворе теперь знают тебя в лицо.',
       f.micNoticed && 'Ты заметил, что микрофон еле живой.',
@@ -41,7 +43,7 @@ export class EndScene extends Phaser.Scene {
     ].filter(Boolean);
 
     rows.forEach((r, i) => {
-      const t = this.add.text(150, 160 + i * 44, `◆  ${r}`, { fontFamily: '"PT Mono", monospace', fontSize: '21px', color: '#e8e4ff' }).setAlpha(0);
+      const t = this.add.text(150, 140 + i * 38, `◆  ${r}`, { fontFamily: '"PT Mono", monospace', fontSize: '21px', color: '#e8e4ff' }).setAlpha(0);
       this.tweens.add({ targets: t, alpha: 1, x: 170, delay: 600 + i * 450, duration: 400, onStart: () => blip(600 + i * 80, 0.03) });
     });
 

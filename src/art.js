@@ -1,7 +1,7 @@
 // Пиксельные спрайты-заглушки, нарисованные прямо в коде.
 // Каждый символ — один пиксель, '.' — прозрачный. Позже заменим на нормальную графику.
 
-export const SCALE = 5;
+export const SCALE = 8;
 
 const LEGS_STAND = [
   '...PPP.PPP..',
@@ -164,5 +164,150 @@ export function createArt(scene) {
   g.clear();
   g.fillStyle(0xffffff, 1).fillCircle(8, 8, 8);
   g.generateTexture('dot', 16, 16);
+  g.clear();
+  g.fillStyle(0xffffff, 1).fillRect(3, 0, 2, 8).fillRect(0, 3, 8, 2);
+  g.generateTexture('spark', 8, 8);
   g.destroy();
+
+  paint(scene, 'bird_0', ['B.....B', '.B...B.', '..BBB..'], { B: '#1a1426' }, 3);
+  paint(scene, 'bird_1', ['.......', 'BBBBBBB', '...B...'], { B: '#1a1426' }, 3);
+  scene.anims.create({ key: 'bird_fly', frames: [{ key: 'bird_0' }, { key: 'bird_1' }], frameRate: 8, repeat: -1 });
+
+  drawArenaPoster(scene);
+  drawTapePoster(scene);
+}
+
+function rand(seed) {
+  let s = seed;
+  return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
+}
+
+// Афиша «Арены» из гаража Дэна: сцена, лучи прожекторов, толпа с поднятыми руками
+function drawArenaPoster(scene) {
+  const W = 240;
+  const H = 340;
+  const tex = scene.textures.createCanvas('poster_arena', W, H);
+  const c = tex.getContext();
+  const r = rand(17);
+
+  const bg = c.createLinearGradient(0, 0, 0, H);
+  bg.addColorStop(0, '#1b0b2e');
+  bg.addColorStop(0.55, '#4a0f3a');
+  bg.addColorStop(1, '#0a0612');
+  c.fillStyle = bg;
+  c.fillRect(0, 0, W, H);
+
+  // Лучи прожекторов
+  c.globalCompositeOperation = 'lighter';
+  [[40, '#ff3d8a'], [120, '#ffd166'], [200, '#3df0ff']].forEach(([x, col]) => {
+    [-1, 1].forEach((dir) => {
+      const g = c.createLinearGradient(x, 120, x + dir * 60, 300);
+      g.addColorStop(0, col);
+      g.addColorStop(1, 'rgba(0,0,0,0)');
+      c.fillStyle = g;
+      c.globalAlpha = 0.35;
+      c.beginPath();
+      c.moveTo(x, 118);
+      c.lineTo(x + dir * 90 - 14, 300);
+      c.lineTo(x + dir * 90 + 14, 300);
+      c.closePath();
+      c.fill();
+    });
+  });
+  c.globalAlpha = 1;
+  c.globalCompositeOperation = 'source-over';
+
+  // Сцена и артист с микрофоном в контровом свете
+  c.fillStyle = '#ffe6b0';
+  c.beginPath();
+  c.ellipse(120, 236, 46, 10, 0, 0, Math.PI * 2);
+  c.fill();
+  c.fillStyle = '#0a0612';
+  c.fillRect(112, 196, 16, 38); // тело
+  c.beginPath();
+  c.arc(120, 188, 9, 0, Math.PI * 2); // голова
+  c.fill();
+  c.fillRect(126, 186, 14, 4); // рука с микрофоном
+  c.fillRect(100, 176, 4, 22); // вскинутая рука
+  c.fillRect(100, 196, 14, 4);
+
+  // Толпа: головы и руки
+  for (let row = 0; row < 3; row++) {
+    for (let i = 0; i < 26; i++) {
+      const x = i * 10 - 6 + r() * 6 + row * 4;
+      const y = 262 + row * 18 + r() * 6;
+      c.fillStyle = row === 0 ? '#1a0d24' : row === 1 ? '#120818' : '#07040c';
+      c.beginPath();
+      c.arc(x, y, 6, 0, Math.PI * 2);
+      c.fill();
+      c.fillRect(x - 7, y + 4, 14, 40);
+      if (r() > 0.6) c.fillRect(x + (r() > 0.5 ? 4 : -6), y - 22, 3, 20);
+      if (r() > 0.85) {
+        c.fillStyle = '#fff6c8';
+        c.fillRect(x + 3, y - 26, 4, 5); // фонарики телефонов
+      }
+    }
+  }
+
+  // Заголовок
+  c.textAlign = 'center';
+  c.font = '30px "Press Start 2P"';
+  c.shadowColor = '#ff3d8a';
+  c.shadowBlur = 14;
+  c.fillStyle = '#ffffff';
+  c.fillText('АРЕНА', W / 2, 58);
+  c.shadowBlur = 0;
+  c.font = '10px "Press Start 2P"';
+  c.fillStyle = '#ffd166';
+  c.fillText('20 000 МЕСТ', W / 2, 82);
+  c.fillStyle = '#3df0ff';
+  c.font = '8px "Press Start 2P"';
+  c.fillText('ГЛАВНАЯ СЦЕНА ГОРОДА', W / 2, 100);
+  c.fillStyle = '#ffffff';
+  c.font = '9px "Press Start 2P"';
+  c.fillText('ТВОЁ ИМЯ ЗДЕСЬ?', W / 2, 330);
+
+  // Скотч по углам и потёртости
+  c.fillStyle = 'rgba(235,225,190,0.75)';
+  c.save();
+  c.translate(8, 8);
+  c.rotate(-0.6);
+  c.fillRect(-14, -6, 34, 12);
+  c.restore();
+  c.save();
+  c.translate(W - 8, 8);
+  c.rotate(0.6);
+  c.fillRect(-20, -6, 34, 12);
+  c.restore();
+  for (let i = 0; i < 400; i++) {
+    c.fillStyle = `rgba(255,255,255,${r() * 0.06})`;
+    c.fillRect(r() * W, r() * H, 2, 2);
+  }
+  tex.refresh();
+}
+
+// Вторая афиша: старый кассетный рэп-сборник
+function drawTapePoster(scene) {
+  const W = 120;
+  const H = 160;
+  const tex = scene.textures.createCanvas('poster_tape', W, H);
+  const c = tex.getContext();
+  c.fillStyle = '#f0c040';
+  c.fillRect(0, 0, W, H);
+  c.fillStyle = '#1a1426';
+  c.fillRect(14, 50, 92, 58);
+  c.fillStyle = '#e8e0d0';
+  c.fillRect(22, 58, 76, 24);
+  c.fillStyle = '#1a1426';
+  c.beginPath();
+  c.arc(42, 70, 8, 0, Math.PI * 2);
+  c.arc(78, 70, 8, 0, Math.PI * 2);
+  c.fill();
+  c.textAlign = 'center';
+  c.font = '11px "Press Start 2P"';
+  c.fillText('РАЙОН', W / 2, 30);
+  c.font = '7px "Press Start 2P"';
+  c.fillText('СБОРНИК 2009', W / 2, 132);
+  c.fillText('ТОЛЬКО ПОДВАЛ', W / 2, 146);
+  tex.refresh();
 }
