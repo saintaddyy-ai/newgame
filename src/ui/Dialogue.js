@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { blip } from '../audio.js';
+import { playVoice, stopVoice } from '../voice.js';
 
 const W = 960;
 const BOX_Y = 34;
@@ -11,7 +12,28 @@ const SPEAKER_COLORS = {
   'Дэн': '#ff6b6b',
   'Баба Валя': '#c9a0ff',
   'Пацан': '#8ae6a0',
+  'Рей': '#e8c27a',
+  'Аркаша': '#f0f0f0',
+  'Стас': '#c0c8d8',
+  'Адам': '#b8b8c0',
+  'Рома': '#ff8a3a',
+  'Палыч': '#ff8a20',
+  'Ахмед': '#6a9aff',
+  'Тётя Люба': '#ffb38a',
+  'Гоша': '#c77dff',
+  'Лёва': '#ffd166',
 };
+
+// Пиксельные портреты (из фото) — показываются в окне диалога
+const PORTRAITS = {
+  'Рей': 'portrait_ray',
+  'Аркаша': 'portrait_arkasha',
+  'Стас': 'portrait_stas',
+  'Адам': 'portrait_adam',
+  'Рома': 'portrait_roma',
+};
+const TEXT_X = 44;
+const TEXT_X_PORTRAIT = 176;
 
 // Окно диалога с печатающимся текстом и выбором ответов (в том числе на время).
 // Сценарии пишутся как async-функции: await d.say(...), const i = await d.choose([...]).
@@ -36,7 +58,9 @@ export class Dialogue {
     this.arrow = scene.add.text(W - 58, BOX_Y + BOX_H - 34, '▼', { fontFamily: 'monospace', fontSize: '20px', color: '#ff3d8a' });
     scene.tweens.add({ targets: this.arrow, alpha: 0.2, duration: 400, yoyo: true, repeat: -1 });
     this.timerBar = scene.add.rectangle(20, BOX_Y + BOX_H + 8, W - 40, 6, 0xff3d8a).setOrigin(0).setVisible(false);
-    c.add([this.box, this.nameBg, this.name, this.body, this.arrow, this.timerBar]);
+    this.portraitBg = scene.add.rectangle(34, BOX_Y + 22, 124, 124, 0x2a1b3d).setOrigin(0).setStrokeStyle(2, 0xff3d8a).setVisible(false);
+    this.portrait = scene.add.image(36, BOX_Y + 24, '__DEFAULT').setOrigin(0).setVisible(false);
+    c.add([this.box, this.portraitBg, this.portrait, this.nameBg, this.name, this.body, this.arrow, this.timerBar]);
     this.choiceItems = [];
 
     const kb = scene.input.keyboard;
@@ -67,12 +91,24 @@ export class Dialogue {
   }
 
   close() {
+    stopVoice();
     this.active = false;
     this.root.setVisible(false);
     this.clearChoices();
   }
 
   setSpeaker(name, color) {
+    // Портрет, если он есть у этого персонажа
+    const tex = PORTRAITS[name];
+    const hasPortrait = !!tex && this.scene.textures.exists(tex);
+    this.portrait.setVisible(hasPortrait);
+    this.portraitBg.setVisible(hasPortrait);
+    if (hasPortrait) {
+      this.portrait.setTexture(tex).setDisplaySize(120, 120);
+      this.portraitBg.setStrokeStyle(2, Phaser.Display.Color.HexStringToColor(SPEAKER_COLORS[name] || '#ff3d8a').color);
+    }
+    this.body.x = hasPortrait ? TEXT_X_PORTRAIT : TEXT_X;
+    this.body.setWordWrapWidth(hasPortrait ? W - 230 : W - 100);
     if (!name) {
       this.name.setText('');
       this.nameBg.setVisible(false);
@@ -89,6 +125,7 @@ export class Dialogue {
       this.finishTyping();
       return;
     }
+    stopVoice();
     const cb = this.onAdvance;
     this.onAdvance = null;
     cb && cb();
@@ -127,6 +164,7 @@ export class Dialogue {
     this.clearChoices();
     this.setSpeaker(name, color);
     this.type(text, { color: '#f2f0ff', fontStyle: 'normal' });
+    if (name) playVoice(name, text);
     return new Promise((resolve) => (this.onAdvance = resolve));
   }
 
@@ -136,6 +174,7 @@ export class Dialogue {
     this.clearChoices();
     this.setSpeaker(null);
     this.type(text, { color: '#a9a6c8', fontStyle: 'italic' });
+    playVoice('think', text);
     return new Promise((resolve) => (this.onAdvance = resolve));
   }
 
@@ -143,19 +182,24 @@ export class Dialogue {
   choose(options, { timer = 0, timeoutIndex = options.length - 1 } = {}) {
     if (!this.active) this.open();
     this.clearChoices();
+    stopVoice();
+    this.typeEvent?.remove();
     this.typing = false;
     this.arrow.setVisible(false);
     this.body.setText('');
     this.setSpeaker('Твой выбор', '#ffd166');
+    // Больше трёх вариантов — строки плотнее, чтобы влезли в окно
+    const dense = options.length > 3;
+    const rowH = options.length > 5 ? 25 : dense ? 30 : 40;
     this.cursor = 0;
     this.readyAt = Date.now() + 250;
 
     options.forEach((opt, i) => {
-      const y = BOX_Y + 22 + i * 40;
-      const bg = this.scene.add.rectangle(40, y, W - 80, 34, 0xffffff, 0.06).setOrigin(0).setScrollFactor(0);
-      const label = this.scene.add.text(54, y + 6, `${i + 1}. ${opt}`, {
+      const y = BOX_Y + (dense ? 10 : 22) + i * rowH;
+      const bg = this.scene.add.rectangle(40, y, W - 80, rowH - 4, 0xffffff, 0.06).setOrigin(0).setScrollFactor(0);
+      const label = this.scene.add.text(54, y + (options.length > 5 ? 3 : dense ? 4 : 6), `${i + 1}. ${opt}`, {
         fontFamily: '"PT Mono", monospace',
-        fontSize: '20px',
+        fontSize: options.length > 5 ? '15px' : dense ? '17px' : '20px',
         color: '#f2f0ff',
       }).setScrollFactor(0);
       bg.setInteractive({ useHandCursor: true })

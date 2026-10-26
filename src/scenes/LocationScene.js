@@ -2,8 +2,8 @@ import Phaser from 'phaser';
 import { Dialogue } from '../ui/Dialogue.js';
 import { Notebook } from '../ui/Notebook.js';
 import { DemoPC } from '../ui/DemoPC.js';
-import { state, addLine, TAGS } from '../state.js';
-import { LOCATIONS } from '../story/prologue.js';
+import { state, addLine, TAGS, ITEMS, giveItem, saveGame } from '../state.js';
+import { getLocation, phaseLabel } from '../story/index.js';
 import { sfx, startAmbience, stopAmbience, currentMusic, BEAT } from '../audio.js';
 
 export const FLOOR = 470;
@@ -18,8 +18,9 @@ export class LocationScene extends Phaser.Scene {
   }
 
   create({ loc, spawnX, facing }) {
-    this.cfg = LOCATIONS[loc];
+    this.cfg = getLocation(loc);
     this.locKey = loc;
+    saveGame({ loc, spawnX: spawnX ?? this.cfg.spawnX, facing });
     this.busy = false;
     this.stepTimer = 0;
     this.lastPrompt = null;
@@ -46,6 +47,10 @@ export class LocationScene extends Phaser.Scene {
 
     if (cfg.foreground) cfg.foreground(this);
     if (cfg.rain) this.makeRain();
+    // Ночь — синее затемнение поверх мира, свет ламп остаётся
+    const night = typeof cfg.night === 'function' ? cfg.night() : cfg.night;
+    if (night) this.add.rectangle(0, 0, cfg.width, 540, 0x0a0824, night === true ? 0.42 : night).setOrigin(0).setDepth(30);
+    this.acidFx = null;
 
     // Подсказка над предметом
     this.prompt = this.add.container(0, 0).setDepth(900).setVisible(false);
@@ -88,7 +93,9 @@ export class LocationScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       stopAmbience();
       this.pc.stop();
+      this.acidTween?.stop();
     });
+    if (state.flags.acidNow) this.setAcid(true);
 
     this.cameras.main.fadeIn(500, 7, 6, 13);
     if (cfg.onEnter) this.time.delayedCall(550, () => this.runScript(cfg.onEnter));
@@ -111,6 +118,14 @@ export class LocationScene extends Phaser.Scene {
       closeup: (build) => this.showCloseup(build),
       closeupHide: () => this.hideCloseup(),
       pc: () => this.pc.show(),
+      card: (title, sub) => this.showCard(title, sub),
+      pickLines: (n, title) => this.notebook.pick(n, title),
+      cash: (delta) => this.addCash(delta),
+      item: (id) => this.giveItemFx(id),
+      goal: (text) => this.setGoal(text),
+      acid: (on) => this.setAcid(on),
+      start: (key, data) => this.startScene(key, data),
+      hud: () => this.refreshHud(),
     };
   }
 
@@ -176,6 +191,7 @@ export class LocationScene extends Phaser.Scene {
 
   update(time, dt) {
     this.hud.setVisible(!this.busy && !this.pc.open);
+    this.info.setVisible(state.episode !== 'prologue' && !this.busy && !this.pc.open);
     this.updateDoors();
     this.pulseToBeat();
     if (this.busy || this.notebook.open || this.pc.open) return;
@@ -224,8 +240,19 @@ export class LocationScene extends Phaser.Scene {
     const w = d.w || 76;
     const top = FLOOR - h;
     const c = this.add.container(d.x - w / 2, top).setDepth(5);
-    const frame = this.add.rectangle(-5, -5, w + 10, h + 5, d.frame ?? 0x1e1626).setOrigin(0);
-    const hole = this.add.rectangle(0, 0, w, h, 0x0c0a12).setOrigin(0);
+    const parts = [];
+    if (d.interior) {
+      // Межкомнатная дверь: светлый наличник, за створкой видна соседняя комната, на полу порожек
+      parts.push(this.add.rectangle(-8, -10, w + 16, h + 10, 0x9a7650).setOrigin(0));
+      parts.push(this.add.rectangle(-8, -10, w + 16, 4, 0xb89068).setOrigin(0));
+      parts.push(this.add.rectangle(0, 0, w, h, d.inside ?? 0x4f4766).setOrigin(0));
+      parts.push(this.add.rectangle(0, h * 0.55, w, h * 0.45, Phaser.Display.Color.ValueToColor(d.inside ?? 0x4f4766).lighten(8).color).setOrigin(0));
+      parts.push(this.add.rectangle(0, h - 14, w, 14, d.insideFloor ?? 0x3a2c24).setOrigin(0));
+      parts.push(this.add.rectangle(-4, h - 4, w + 8, 4, 0xb89068).setOrigin(0));
+    } else {
+      parts.push(this.add.rectangle(-5, -5, w + 10, h + 5, d.frame ?? 0x1e1626).setOrigin(0));
+      parts.push(this.add.rectangle(0, 0, w, h, 0x0c0a12).setOrigin(0));
+    }
     const panel = this.add.container(0, 0);
     const color = d.color ?? 0x5a3a2a;
     const dark = Phaser.Display.Color.ValueToColor(color).darken(15).color;
@@ -237,18 +264,22 @@ export class LocationScene extends Phaser.Scene {
       panel.add(this.add.rectangle(8, h * 0.5, w - 16, h * 0.42, dark).setOrigin(0));
       panel.add(this.add.rectangle(w - 14, h * 0.5, 8, 8, 0xd8b040).setOrigin(0));
     }
-    c.add([frame, hole, panel]);
-    return { ...d, c, panel, w, open: false };
+    // Тень на створке — когда дверь повёрнута к нам, она темнее
+    const shade = this.add.rectangle(0, 0, w, h, 0x000000, 1).setOrigin(0).setAlpha(0);
+    panel.add(shade);
+    c.add([...parts, panel]);
+    return { ...d, c, panel, shade, w, open: false };
   }
 
   setDoor(door, open, silent = false) {
     if (!door || door.open === open) return;
     door.open = open;
-    if (!silent) sfx(open ? (door.metal ? 'gate' : 'door') : 'doorClose');
+    if (!silent) sfx(open ? (door.metal ? 'gate' : 'door') : door.interior ? 'doorSoft' : 'doorClose');
     this.tweens.killTweensOf(door.panel);
     // Створка «поворачивается» к нам — сжимаем по ширине
     this.tweens.add({ targets: door.panel, scaleX: open ? 0.14 : 1, duration: open ? 260 : 200, ease: open ? 'Cubic.out' : 'Cubic.in' });
-    if (!open) this.cameras.main.shake(80, 0.002);
+    this.tweens.add({ targets: door.shade, alpha: open ? 0.45 : 0, duration: open ? 260 : 200 });
+    if (!open && !door.interior) this.cameras.main.shake(80, 0.002);
   }
 
   // Межкомнатные двери открываются сами, когда к ним подходит кто угодно
@@ -401,7 +432,7 @@ export class LocationScene extends Phaser.Scene {
     this.busy = true;
     this.cameras.main.fadeOut(450, 7, 6, 13);
     this.cameras.main.once('camerafadeoutcomplete', () => {
-      if (loc === 'Studio' || loc === 'End') this.scene.start(loc);
+      if (loc === 'Studio' || loc === 'End') this.scene.start(loc, { episode: state.episode });
       else this.scene.restart({ loc, spawnX, facing });
     });
   }
@@ -436,6 +467,13 @@ export class LocationScene extends Phaser.Scene {
   }
 
   makeHud() {
+    // Слева сверху — день и деньги (с Эпизода 1)
+    this.info = this.add.container(20, 20).setScrollFactor(0).setDepth(960);
+    this.infoBg = this.add.rectangle(0, 0, 240, 52, 0x0c0a16, 0.85).setOrigin(0).setStrokeStyle(2, 0x3df0ff);
+    this.dayText = this.add.text(12, 9, '', { fontFamily: '"Press Start 2P"', fontSize: '10px', color: '#3df0ff' });
+    this.cashText = this.add.text(12, 28, '', { fontFamily: '"PT Mono", monospace', fontSize: '17px', color: '#ffffff' });
+    this.info.add([this.infoBg, this.dayText, this.cashText]);
+    this.refreshHud();
     const btn = (this.hud = this.add.container(892, 34)).setScrollFactor(0).setDepth(960);
     const bg = this.add.rectangle(0, 0, 100, 44, 0x0c0a16, 0.85).setStrokeStyle(2, 0xffd166);
     const t = this.add.text(-38, 0, '✎ [Q]', { fontFamily: '"PT Mono", monospace', fontSize: '18px', color: '#ffd166' }).setOrigin(0, 0.5);
@@ -446,6 +484,87 @@ export class LocationScene extends Phaser.Scene {
     bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
       if (!this.busy) this.notebook.open ? this.notebook.hide() : this.openNotebook();
     });
+  }
+
+  refreshHud() {
+    const on = state.episode !== 'prologue';
+    this.info.setVisible(on);
+    if (!on) return;
+    this.dayText.setText(phaseLabel());
+    this.cashText.setText(`${state.cash.toLocaleString('ru-RU')} ₽`);
+    this.infoBg.width = Math.max(200, this.dayText.width + 24, this.cashText.width + 24);
+  }
+
+  addCash(delta) {
+    state.cash = Math.max(0, state.cash + delta);
+    this.refreshHud();
+    sfx(delta >= 0 ? 'coins' : 'deny');
+    const t = this.add.text(30, 80, `${delta >= 0 ? '+' : '−'}${Math.abs(delta).toLocaleString('ru-RU')} ₽`, {
+      fontFamily: '"Press Start 2P"', fontSize: '16px', color: delta >= 0 ? '#8ae6a0' : '#ff6b8a', stroke: '#0c0a16', strokeThickness: 5,
+    }).setScrollFactor(0).setDepth(970);
+    this.tweens.add({ targets: t, y: 50, alpha: 0, delay: 900, duration: 700, onComplete: () => t.destroy() });
+    this.tweens.add({ targets: this.info, scale: 1.08, duration: 90, yoyo: true });
+  }
+
+  giveItemFx(id) {
+    giveItem(id);
+    sfx('select');
+    this.showToast('В КАРМАНЕ', ITEMS[id] || id, '#3df0ff');
+  }
+
+  setGoal(text) {
+    state.goal = text;
+    sfx('page');
+    this.showToast('ЦЕЛЬ', text, '#ffd166');
+  }
+
+  // Полноэкранная перебивка: «СРЕДА. ДЕНЬ.»
+  showCard(title, sub = '') {
+    return new Promise((resolve) => {
+      const bg = this.add.rectangle(0, 0, 960, 540, 0x07060d).setOrigin(0).setScrollFactor(0).setDepth(2000).setAlpha(0);
+      const t1 = this.add.text(480, 250, title, { fontFamily: '"Press Start 2P"', fontSize: '30px', color: '#ffffff', stroke: '#ff3d8a', strokeThickness: 8 })
+        .setOrigin(0.5).setScrollFactor(0).setDepth(2001).setAlpha(0);
+      const t2 = this.add.text(480, 300, sub, { fontFamily: '"PT Mono", monospace', fontSize: '20px', color: '#c9c4ee' })
+        .setOrigin(0.5).setScrollFactor(0).setDepth(2001).setAlpha(0);
+      sfx('whoosh');
+      this.tweens.add({ targets: bg, alpha: 1, duration: 400 });
+      this.tweens.add({
+        targets: [t1, t2], alpha: 1, delay: 300, duration: 400, hold: 1400, yoyo: true,
+        onComplete: () => {
+          this.refreshHud();
+          this.tweens.add({ targets: bg, alpha: 0, duration: 400, onComplete: () => { bg.destroy(); t1.destroy(); t2.destroy(); resolve(); } });
+        },
+      });
+    });
+  }
+
+  // Кислотный режим: цвета плывут по кругу, картинка «дышит»
+  setAcid(on) {
+    const cam = this.cameras.main;
+    if (!cam.postFX) return;
+    if (on && !this.acidFx) {
+      this.acidFx = cam.postFX.addColorMatrix();
+      this.acidBarrel = cam.postFX.addBarrel(1);
+      const st = { a: 0 };
+      this.acidTween = this.tweens.add({
+        targets: st, a: 360, duration: 6000, repeat: -1,
+        onUpdate: () => {
+          this.acidFx.hue(st.a);
+          this.acidBarrel.amount = 1 + Math.sin(st.a / 18) * 0.05;
+        },
+      });
+    } else if (!on && this.acidFx) {
+      this.acidTween?.stop();
+      cam.postFX.remove(this.acidFx);
+      cam.postFX.remove(this.acidBarrel);
+      this.acidFx = null;
+    }
+  }
+
+  startScene(key, data) {
+    this.busy = true;
+    this.cameras.main.fadeOut(400, 7, 6, 13);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(key, data));
   }
 
   makeToast() {

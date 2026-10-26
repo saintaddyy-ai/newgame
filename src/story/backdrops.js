@@ -50,7 +50,6 @@ export function drawSkyline(scene, width, { seed = 1, groundY = 540 } = {}) {
 function partition(g, x, color) {
   g.fillStyle(0x1e1626, 1).fillRect(x, 0, 70, FLOOR);
   g.fillStyle(color, 1).fillRect(x + 6, 0, 58, FLOOR);
-  g.fillStyle(0x15101c, 1).fillRect(x + 4, 262, 62, FLOOR - 262);
 }
 
 export function drawApartment(scene, width) {
@@ -144,15 +143,14 @@ export function drawApartment(scene, width) {
   g.fillStyle(0x8a6a40, 1).fillRect(1570, 170, 70, 130);
   g.fillStyle(0x8ab0c8, 1).fillRect(1576, 176, 58, 118);
   g.fillStyle(0xc8e0f0, 0.6).fillTriangle(1580, 180, 1610, 180, 1580, 230);
-  // Проём ванной и входной двери (сами двери — отдельные объекты)
-  g.fillStyle(0x15101c, 1).fillRect(1660, 268, 86, FLOOR - 268);
+  // Проём входной двери (сами двери — отдельные объекты)
   g.fillStyle(0x15101c, 1).fillRect(1790, 258, 100, FLOOR - 258);
   g.fillStyle(0xfff0b0, 1).fillRect(1682, 250, 40, 10); // табличка ванной
   g.fillStyle(0x1e1626, 1).fillRect(1694, 252, 16, 6);
   return g;
 }
 
-export function drawYard(scene, width) {
+export function drawYard(scene, width, opts = {}) {
   drawSkyline(scene, width, { seed: 42, groundY: FLOOR - 10 });
   const g = scene.add.graphics();
 
@@ -210,7 +208,7 @@ export function drawYard(scene, width) {
   scene.graffiti.setShadow(0, 0, '#3df0ff', 16, true, true);
 
   // Гаражи — выше человеческого роста
-  for (let x = 1620; x < width - 40; x += 160) {
+  for (let x = 1620; x < Math.min(width, 2200) - 40; x += 160) {
     g.fillStyle(0x3a3f4a, 1).fillRect(x, 250, 154, 210);
     g.fillStyle(0x2e323c, 1).fillRect(x - 4, 242, 162, 10);
     g.fillStyle(0x4a505c, 1).fillRect(x + 10, 270, 134, 190);
@@ -220,6 +218,187 @@ export function drawYard(scene, width) {
   g.fillStyle(0xffd27a, 0.9).fillRect(1950, 420, 134, 40);
   g.fillStyle(0xffd27a, 0.12).fillTriangle(1950, 460, 2084, 460, 2017, 530);
   scene.add.text(2017, 228, '№17', { fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#ffd166' }).setOrigin(0.5);
+  if (width > 2200) drawArch(scene, g, opts);
+  return g;
+}
+
+// За гаражами: дом с аркой, через арку видна улица
+function drawArch(scene, g, opts) {
+  const x0 = 2180;
+  // Улица за аркой — светлее и живее двора
+  bands(g, 2440, 200, 150, FLOOR - 200, [0x3a2a5a, 0x5a3a6a, 0x7a4a6a]);
+  g.fillStyle(0x2a2238, 1).fillRect(2440, 330, 150, 130);
+  g.fillStyle(0xffd27a, 0.9).fillRect(2452, 350, 30, 40).fillRect(2540, 350, 34, 40);
+  if (opts.barberSign) {
+    g.fillStyle(0x1a1a22, 1).fillRect(2456, 300, 120, 26);
+    scene.add.text(2516, 313, 'ОПАСНАЯ БРИТВА', { fontFamily: '"Press Start 2P"', fontSize: '7px', color: '#ff3d8a' }).setOrigin(0.5);
+    // Полосатый столб барбершопа
+    for (let y = 330; y < 400; y += 12) g.fillStyle(y % 24 ? 0xffffff : 0xd83a3a, 1).fillRect(2584, y, 6, 12);
+  }
+  // Дом и арка
+  g.fillStyle(0x2c2436, 1).fillRect(x0, 120, 260, FLOOR - 120).fillRect(2590, 120, 2700 - 2590, FLOOR - 120);
+  g.fillStyle(0x2c2436, 1).fillRect(2440, 120, 150, 80);
+  g.fillStyle(0x3a3046, 1).fillRect(2436, 196, 158, 8);
+  for (let y = 140; y < FLOOR - 20; y += 26) for (let x = x0 + 10; x < 2700; x += 34) {
+    if (x > 2420 && x < 2600 && y > 190) continue;
+    g.fillStyle(0x251f2e, 1).fillRect(x, y, 30, 2);
+  }
+  // Окна дома
+  [[2200, 150], [2290, 150], [2620, 150], [2200, 250], [2620, 250]].forEach(([x, y], i) => {
+    g.fillStyle(i % 2 ? 0x15102a : 0xffd27a, 1).fillRect(x, y, 44, 40);
+  });
+  // Фонарь над аркой
+  g.fillStyle(0xffe0a0, 1).fillRect(2506, 206, 18, 8);
+  g.fillStyle(0xffe0a0, 0.1).fillTriangle(2515, 214, 2420, FLOOR, 2610, FLOOR);
+  if (opts.merc) drawMerc(g, 2215);
+  if (opts.openMic) scene.add.image(2660, 300, 'poster_openmic').setDisplaySize(64, 83).setAngle(2);
+}
+
+// Старый «Мерс» Рея (боком)
+function drawMerc(g, x) {
+  const y = FLOOR - 70;
+  g.fillStyle(0x8a8c94, 1).fillRect(x, y + 20, 200, 38).fillRect(x + 40, y, 110, 24);
+  g.fillStyle(0x2a3a4a, 1).fillRect(x + 48, y + 4, 44, 18).fillRect(x + 98, y + 4, 44, 18);
+  g.fillStyle(0x6a6c74, 1).fillRect(x, y + 40, 200, 4);
+  g.fillStyle(0xffe8a8, 1).fillRect(x + 194, y + 26, 6, 8);
+  g.fillStyle(0xd83a3a, 1).fillRect(x, y + 26, 5, 8);
+  g.fillStyle(0x141418, 1).fillCircle(x + 40, y + 60, 15).fillCircle(x + 160, y + 60, 15);
+  g.fillStyle(0xb8b8c0, 1).fillCircle(x + 40, y + 60, 6).fillCircle(x + 160, y + 60, 6);
+}
+
+// Ванная: плитка, ванна, раковина с зеркалом, унитаз, «Малютка»
+export function drawBathroom(scene, width) {
+  const g = scene.add.graphics();
+  g.fillStyle(0x6a8a9a, 1).fillRect(0, 0, width, 200);
+  g.fillStyle(0x8ab4c8, 1).fillRect(0, 200, width, FLOOR - 200);
+  for (let x = 0; x < width; x += 30) g.fillStyle(0x7aa0b4, 1).fillRect(x, 200, 2, FLOOR - 200);
+  for (let y = 200; y < FLOOR; y += 30) g.fillStyle(0x7aa0b4, 1).fillRect(0, y, width, 2);
+  // Отбитые плитки
+  [[150, 260], [420, 320], [880, 230], [700, 410]].forEach(([x, y]) => g.fillStyle(0x5a7080, 1).fillRect(x, y, 28, 28));
+  // Пол в шашечку
+  for (let x = 0; x < width; x += 40) for (let y = FLOOR; y < 540; y += 35) g.fillStyle((x / 40 + (y - FLOOR) / 35) % 2 ? 0x4a5a68 : 0x5a6a78, 1).fillRect(x, y, 40, 35);
+  g.fillStyle(0x3a4a58, 1).fillRect(0, FLOOR - 6, width, 6);
+  // Лампочка
+  g.fillStyle(0x1a1a1a, 1).fillRect(498, 0, 4, 40);
+  g.fillStyle(0xfff0c0, 1).fillCircle(500, 48, 10);
+  g.fillStyle(0xfff0c0, 0.07).fillTriangle(500, 50, 150, FLOOR, 850, FLOOR);
+  // Стиральная машина «Малютка»
+  g.fillStyle(0xe8e8ec, 1).fillRect(170, 380, 70, 90);
+  g.fillStyle(0xb8b8c0, 1).fillRect(170, 372, 70, 10);
+  g.fillStyle(0x3a6aaa, 1).fillRect(186, 400, 38, 6);
+  // Раковина и зеркальный шкафчик
+  g.fillStyle(0xf0f0f4, 1).fillRect(300, 370, 90, 22).fillRect(334, 392, 22, 78);
+  g.fillStyle(0xb8b8c0, 1).fillRect(340, 352, 6, 20);
+  g.fillStyle(0xe8e0d0, 1).fillRect(296, 210, 98, 120);
+  g.fillStyle(0x9ab8c8, 1).fillRect(304, 218, 82, 104);
+  g.fillStyle(0xd8e4ec, 0.6).fillRect(304, 218, 82, 104); // запотело
+  // Унитаз
+  g.fillStyle(0xf0f0f4, 1).fillRect(480, 340, 50, 70).fillRect(462, 410, 80, 26).fillRect(476, 436, 50, 34);
+  g.fillStyle(0xc8c8d0, 1).fillRect(498, 330, 14, 10);
+  // Полка с кремами
+  g.fillStyle(0x8a6a48, 1).fillRect(580, 250, 110, 8);
+  [[590, 0xff9ab8], [612, 0xffffff], [632, 0x8ae6a0], [656, 0xffd166]].forEach(([x, c]) => g.fillStyle(c, 1).fillRect(x, 226, 14, 24));
+  // Ванна с отбитой эмалью и краном
+  g.fillStyle(0xf4f4f8, 1).fillRect(700, 380, 260, 70);
+  g.fillStyle(0xd8d8e0, 1).fillRect(700, 380, 260, 10);
+  g.fillStyle(0x2a2a30, 1).fillRect(760, 410, 10, 8).fillRect(880, 420, 14, 8);
+  g.fillStyle(0xc8c8d0, 1).fillRect(712, 450, 10, 20).fillRect(938, 450, 10, 20);
+  g.fillStyle(0xb8b8c0, 1).fillRect(770, 330, 8, 50).fillRect(758, 330, 30, 8);
+  // Полотенца на крючках
+  g.fillStyle(0xff9ab8, 1).fillRect(610, 300, 30, 60);
+  g.fillStyle(0x6a8aff, 1).fillRect(650, 300, 30, 70);
+  return g;
+}
+
+// Склад «ЛогистЛайн»: стеллажи, конвейер, погрузчик
+export function drawWarehouse(scene, width) {
+  const g = scene.add.graphics();
+  g.fillStyle(0x3a3e46, 1).fillRect(0, 0, width, FLOOR);
+  for (let x = 0; x < width; x += 120) g.fillStyle(0x34383f, 1).fillRect(x, 0, 6, FLOOR);
+  g.fillStyle(0x2a2c30, 1).fillRect(0, FLOOR, width, 70);
+  g.fillStyle(0xd8b040, 1);
+  for (let x = 0; x < width; x += 80) g.fillRect(x, FLOOR + 20, 40, 6);
+  // Лампы дневного света
+  for (let x = 120; x < width; x += 300) {
+    g.fillStyle(0xe8f4ff, 1).fillRect(x, 30, 120, 8);
+    g.fillStyle(0xe8f4ff, 0.05).fillTriangle(x + 60, 38, x - 80, FLOOR, x + 200, FLOOR);
+  }
+  // Стеллажи с коробками
+  for (let x = 320; x < 1100; x += 260) {
+    g.fillStyle(0x2a5aa8, 1).fillRect(x, 120, 8, 350).fillRect(x + 200, 120, 8, 350);
+    for (let y = 180; y < 470; y += 100) {
+      g.fillStyle(0xff8a20, 1).fillRect(x, y, 208, 6);
+      for (let b = x + 12; b < x + 190; b += 50) g.fillStyle(0xc89a5a, 1).fillRect(b, y - 40, 44, 40);
+    }
+  }
+  // Ворота фуры
+  g.fillStyle(0x1a1c20, 1).fillRect(1260, 200, 220, FLOOR - 200);
+  g.fillStyle(0xd8b040, 1).fillRect(1260, 196, 220, 6);
+  g.fillStyle(0xd8d8d8, 1).fillRect(1290, 260, 170, 140);
+  g.fillStyle(0x2a2c30, 1).fillRect(1300, 270, 150, 120);
+  // Погрузчик
+  g.fillStyle(0xffc020, 1).fillRect(150, 380, 90, 60).fillRect(170, 330, 50, 50);
+  g.fillStyle(0x2a2a2a, 1).fillRect(240, 330, 6, 120).fillCircle(170, 450, 16).fillCircle(225, 450, 12);
+  // Табличка
+  g.fillStyle(0xff8a20, 1).fillRect(40, 90, 200, 40);
+  scene.add.text(140, 110, 'ЛОГИСТЛАЙН', { fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#1a1c20' }).setOrigin(0.5);
+  scene.add.text(140, 150, 'УРОНИЛ — ЗАПЛАТИЛ', { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#ff8a20' }).setOrigin(0.5);
+  return g;
+}
+
+// Ломбард: решётка, прилавок, витрины с гитарами и телевизорами
+export function drawPawnshop(scene, width) {
+  const g = scene.add.graphics();
+  g.fillStyle(0x3a2a24, 1).fillRect(0, 0, width, FLOOR);
+  for (let x = 0; x < width; x += 50) g.fillStyle(0x34261f, 1).fillRect(x, 0, 25, FLOOR);
+  g.fillStyle(0x2a1e1a, 1).fillRect(0, FLOOR, width, 70);
+  // Полки: гитары, телевизоры, магнитофоны
+  g.fillStyle(0x5a3a2a, 1).fillRect(40, 140, 360, 8).fillRect(40, 250, 360, 8);
+  [[60, 0xc8642a], [130, 0x2a2a2a], [200, 0xd8b040]].forEach(([x, c]) => {
+    g.fillStyle(c, 1).fillEllipse(x + 20, 228, 40, 36).fillRect(x + 16, 150, 8, 70);
+  });
+  g.fillStyle(0x2a2a30, 1).fillRect(260, 90, 60, 50).fillRect(330, 100, 50, 40);
+  g.fillStyle(0x6a8aaa, 1).fillRect(266, 96, 48, 36).fillRect(336, 106, 38, 28);
+  g.fillStyle(0x4a4a52, 1).fillRect(270, 210, 110, 40);
+  // Прилавок с решёткой
+  g.fillStyle(0x5a3a2a, 1).fillRect(520, 360, 320, 110);
+  g.fillStyle(0x8ab4c8, 0.3).fillRect(530, 370, 300, 40);
+  g.fillStyle(0xffd166, 1).fillRect(560, 390, 20, 6).fillRect(620, 392, 30, 4).fillRect(700, 388, 12, 12);
+  for (let x = 520; x <= 840; x += 20) g.fillStyle(0x6a6a72, 1).fillRect(x, 160, 3, 200);
+  g.fillStyle(0x6a6a72, 1).fillRect(520, 160, 323, 4);
+  // Вывеска
+  g.fillStyle(0xd8b040, 1).fillRect(560, 70, 240, 40);
+  scene.add.text(680, 90, 'ЛОМБАРД 24', { fontFamily: '"Press Start 2P"', fontSize: '14px', color: '#2a1e1a' }).setOrigin(0.5);
+  // Выход
+  g.fillStyle(0x15101c, 1).fillRect(910, 250, 90, FLOOR - 250);
+  return g;
+}
+
+// Барахолка под эстакадой у станции
+export function drawFlea(scene, width) {
+  const g = scene.add.graphics();
+  bands(g, 0, 0, width, FLOOR, [0x15102a, 0x1e1535, 0x2a1b3d, 0x3a1f45]);
+  // Эстакада
+  g.fillStyle(0x3a3a44, 1).fillRect(0, 60, width, 50);
+  for (let x = 80; x < width; x += 400) g.fillStyle(0x34343c, 1).fillRect(x, 110, 50, FLOOR - 110);
+  g.fillStyle(0x2b2b33, 1).fillRect(0, FLOOR, width, 70);
+  // Гирлянда
+  for (let x = 10; x < width; x += 36) g.fillStyle([0xffd166, 0xff3d8a, 0x3df0ff][(x / 36) % 3 | 0], 1).fillCircle(x, 140 + Math.sin(x / 60) * 10, 4);
+  // Прилавки под тентами
+  [[160, 0x2a6a8a], [520, 0x8a2a4a], [900, 0x4a6a2a], [1260, 0x6a4a8a]].forEach(([x, c]) => {
+    g.fillStyle(c, 1).fillRect(x, 230, 260, 30);
+    for (let i = 0; i < 260; i += 26) g.fillStyle(0xe8e0d0, 1).fillRect(x + i, 230, 13, 30);
+    g.fillStyle(0x5a3a2a, 1).fillRect(x + 10, 380, 240, 14).fillRect(x + 20, 394, 10, 76).fillRect(x + 230, 394, 10, 76);
+    g.fillStyle(0x3a3a3a, 1).fillRect(x, 260, 6, 210).fillRect(x + 254, 260, 6, 210);
+  });
+  // Товар: кассеты, провода, микрофоны, колонки
+  for (let i = 0; i < 9; i++) g.fillStyle([0xe8e0d0, 0x2a2a2a, 0xd83a3a][i % 3], 1).fillRect(180 + i * 24, 364, 18, 16);
+  g.fillStyle(0x2a2a2a, 1).fillRect(560, 330, 40, 50).fillRect(620, 340, 30, 40);
+  g.fillStyle(0x8a8a9a, 1).fillRect(940, 350, 12, 30).fillRect(980, 345, 12, 35).fillRect(1020, 352, 12, 28).fillRect(1060, 348, 12, 32);
+  g.fillStyle(0x3a3a44, 1).fillCircle(946, 348, 9).fillCircle(986, 343, 9).fillCircle(1026, 350, 9).fillCircle(1066, 346, 9);
+  g.fillStyle(0x6a4a2a, 1).fillRect(1300, 330, 60, 50);
+  scene.add.text(1030, 214, 'ЗВУК · ПРОВОДА · МИКРОФОНЫ', { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#ffd166' }).setOrigin(0.5);
+  scene.add.text(width / 2, 86, 'СТ. ЗАВОДСКАЯ', { fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#ff3d3d' }).setOrigin(0.5);
   return g;
 }
 

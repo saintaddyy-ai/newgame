@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { state, TAGS } from '../state.js';
+import { state, TAGS, addLine } from '../state.js';
 import { BEAT, audioCtx, loadBuffer, playBuffer, playMusic, stopMusic, sfx } from '../audio.js';
 import { karaokeTimeline, saveDemo, playDemo } from '../demos.js';
 
@@ -30,8 +30,18 @@ export class StudioScene extends Phaser.Scene {
     super('Studio');
   }
 
-  create() {
+  create(data = {}) {
+    // mode: 'prologue' — первый трек; 'rehearsal' — репетиция в финале Эпизода 1
+    this.mode = data.mode || 'prologue';
     this.picked = [];
+    // Подстраховка: если строчек меньше трёх (часть продана Рею) — Дэн подкидывает свои
+    const spare = [
+      { id: 'dan_spare1', text: 'Из подвала в небо — это не мечта, а план', tag: 'dream' },
+      { id: 'dan_spare2', text: 'Гараж вместо студии, мечты вместо денег', tag: 'dream' },
+      { id: 'dan_spare3', text: 'Наш район не спит, он просто ждёт', tag: 'street' },
+    ];
+    for (const l of spare) if (state.lines.length < 3) addLine(l);
+    if (data.acid) this.startAcid();
     this.phase = 'pick';
     this.ui = [];
     this.cameras.main.fadeIn(400, 7, 6, 13);
@@ -102,8 +112,10 @@ export class StudioScene extends Phaser.Scene {
   showPick() {
     this.clearUi();
     this.phase = 'pick';
-    this.title('ПИШЕМ ТРЕК', `Выбери ${PICK} строчки из тетради`);
-    this.cards = state.lines.map((l, i) => this.makeCard(l, i));
+    this.title(this.mode === 'rehearsal' ? 'РЕПЕТИЦИЯ' : 'ПИШЕМ ТРЕК', `Выбери ${PICK} строчки из тетради`);
+    // На экран влезает 12 карточек — берём последние собранные
+    this.pool = state.lines.slice(-12);
+    this.cards = this.pool.map((l, i) => this.makeCard(l, i));
     this.recBtn = this.add2(this.add.text(480, 500, '● К МИКРОФОНУ', {
       fontFamily: PIXEL, fontSize: '16px', color: '#0c0a16', backgroundColor: '#ff3d3d', padding: { x: 18, y: 12 },
     }).setOrigin(0.5).setAlpha(0.3));
@@ -111,7 +123,7 @@ export class StudioScene extends Phaser.Scene {
   }
 
   makeCard(line, i) {
-    const cols = state.lines.length > 6 ? 2 : 1;
+    const cols = this.pool.length > 6 ? 2 : 1;
     const col = cols === 2 ? i % 2 : 0;
     const row = cols === 2 ? Math.floor(i / 2) : i;
     const w = cols === 2 ? 430 : 700;
@@ -383,7 +395,7 @@ export class StudioScene extends Phaser.Scene {
   demoData() {
     const theme = trackTheme(this.picked);
     return {
-      title: TITLES[theme],
+      title: this.mode === 'rehearsal' ? `${TITLES[theme]} (репетиция)` : TITLES[theme],
       theme,
       lines: this.picked.map((l) => ({ ...l })),
       items: this.tl.items,
@@ -415,7 +427,8 @@ export class StudioScene extends Phaser.Scene {
     const demo = this.demoData();
     await saveDemo(demo);
     state.tracks.push({ title: demo.title, theme: demo.theme, lines: demo.lines, voice: !!demo.voice, score: demo.score });
-    state.flags.trackDone = true;
+    if (this.mode === 'rehearsal') state.flags.e1Rehearsal = true;
+    else state.flags.trackDone = true;
     if (demo.theme === 'pain') state.stats.honesty += 1;
     if (demo.theme === 'street') state.stats.fame += 1;
     this.clearUi();
@@ -426,6 +439,15 @@ export class StudioScene extends Phaser.Scene {
       this.cameras.main.fadeOut(500, 7, 6, 13);
       this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Location', { loc: 'garage', spawnX: 780 }));
     });
+  }
+
+  // Кислотный режим (если Марк взял марочку у Рея): цвета плывут
+  startAcid() {
+    const cam = this.cameras.main;
+    if (!cam.postFX) return;
+    const fx = cam.postFX.addColorMatrix();
+    const st = { a: 0 };
+    this.tweens.add({ targets: st, a: 360, duration: 6000, repeat: -1, onUpdate: () => fx.hue(st.a) });
   }
 
   cleanup() {

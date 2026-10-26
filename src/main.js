@@ -6,6 +6,7 @@ import { TitleScene } from './scenes/TitleScene.js';
 import { LocationScene } from './scenes/LocationScene.js';
 import { StudioScene } from './scenes/StudioScene.js';
 import { EndScene } from './scenes/EndScene.js';
+import { WarehouseScene } from './scenes/WarehouseScene.js';
 
 // Ждём шрифты (но не дольше 2 секунд), иначе первый текст отрисуется системным шрифтом
 async function loadFonts() {
@@ -28,6 +29,6 @@ loadFonts().then(() => {
     pixelArt: true,
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     input: { activePointers: 3 },
-    scene: [BootScene, TitleScene, LocationScene, StudioScene, EndScene],
+    scene: [BootScene, TitleScene, LocationScene, StudioScene, EndScene, WarehouseScene],
   });
 });

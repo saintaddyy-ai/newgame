@@ -124,6 +124,199 @@ const CHARACTERS = {
       '...PPPPPP...',
     ],
   },
+
+  // ---------- Независимые (по фото) ----------
+  // Рей: блондин, леопардовая куртка на молнии, розовые очки, тату на кисти
+  ray: {
+    palette: { H: '#e0c890', h: '#b89a60', s: '#ecc6a6', e: '#141418', g: '#ff7ab8', y: '#ffd166', L: '#cfc6ae', l: '#4a4438', z: '#9a9a9a', t: '#4a5a6a', P: '#2a2a34', B: '#e8e8e8' },
+    body: [
+      '...hHHHh....',
+      '..HHHHHHHh..',
+      '..hHHssHHH..',
+      '..Hggsggs...',
+      '...sssss....',
+      '...ssyss....',
+      '....sss.....',
+      '..LlLzLLL...',
+      '.LLlLzLlLL..',
+      '.lLLLzLLLl..',
+      '.LLlLzLlLL..',
+      '.sLLLzLLLs..',
+      '.tLlLzLLlt..',
+      '..LLLzLlL...',
+      '..PPPPPPP...',
+    ],
+  },
+  // Аркаша: тёмные лохматые волосы, белая футболка, джинсы с ремнём
+  arkasha: {
+    palette: { H: '#2a1e18', h: '#4a3426', s: '#e6bc9a', e: '#141418', W: '#f2f2f2', w: '#d8d8dc', b: '#3a2418', P: '#5a7aa8', B: '#e8e8e8' },
+    body: [
+      '..hHHHHH....',
+      '.HHHHHHHHh..',
+      'hHHsssHHHH..',
+      '.HHssesHH...',
+      '.HHsssss....',
+      '...sssss....',
+      '....sss.....',
+      '..WWWWWWW...',
+      '.WWWWwWWWW..',
+      '.WWWWWWWWW..',
+      '.sWWWWWWWs..',
+      '.sWwWWWWWs..',
+      '..WWWWWWW...',
+      '..bbbbbbb...',
+      '..PPPPPPP...',
+    ],
+  },
+  // Стас: русая чёлка, очки-авиаторы, чёрная футболка, серебряная цепь
+  stas: {
+    palette: { H: '#5a3e2a', h: '#7a5a3e', s: '#ecc4a4', e: '#2a3a2a', g: '#b8b8c0', T: '#1a1a1e', c: '#e0e0e8', p: '#3a3a3a', y: '#d8b040', P: '#22242c', B: '#1a1a1a' },
+    body: [
+      '...hHHHh....',
+      '..HHHHHHHh..',
+      '..HHHHHHHH..',
+      '..ggegges...',
+      '..Hsssss....',
+      '...sssss....',
+      '....sss.....',
+      '..TcTTTcT...',
+      '.TTTcTcTTT..',
+      '.TTTTcTTTT..',
+      '.sTTTTTpyT..',
+      '.sTTTTTTTs..',
+      '..TTTTTTT...',
+      '..TTTTTTT...',
+      '..PPPPPPP...',
+    ],
+  },
+  // Адам: чёрные дреды до плеч, серый свитшот с принтом, тёмные джинсы
+  adam: {
+    palette: { H: '#141010', h: '#2a2420', s: '#d8a888', e: '#141418', u: '#8a6a6a', G: '#cfcfd4', p: '#7a7a82', P: '#22242c', B: '#2a2a2a' },
+    body: [
+      '..hHHHHh....',
+      '.HHHHHHHHh..',
+      'hHHsssHHHH..',
+      'HHueseuHHh..',
+      'HHsssssHH...',
+      'H.sssss.H...',
+      '....sss.....',
+      '..GGGGGGG...',
+      '.GGGGGGGGG..',
+      '.GGppppGGG..',
+      '.GGpGGpGGG..',
+      '.sGGppGGGs..',
+      '.sGGGGGGGs..',
+      '..GGGGGGG...',
+      '..PPPPPPP...',
+    ],
+  },
+  // Рома (3g0th2002): рыжие кудри на глаза, пирсинг, усики, чёрное худи
+  roma: {
+    palette: { H: '#d0742a', h: '#f0a050', s: '#e8c0a0', e: '#141418', r: '#e0e0e8', m: '#8a5a3a', K: '#1e1e26', k: '#2e2e38', P: '#1a1a22', B: '#1a1a1a' },
+    body: [
+      '.hHHHhHH....',
+      'HHHhHHHHHh..',
+      'HHHHHHHHHH..',
+      'hHHHHHesHH..',
+      '.HHsssrsH...',
+      '..ssmmms....',
+      '...ssrs.....',
+      '..KKKKKKK...',
+      '.KKKKkKKKK..',
+      '.KKKkKkKKK..',
+      '.KKKKKKKKK..',
+      '.sKKKKKKKs..',
+      '..KKKKKKK...',
+      '..KKKKKKK...',
+      '..PPPPPPP...',
+    ],
+  },
+
+  // ---------- Эпизод 1 ----------
+  // Палыч: бригадир, кепка, оранжевый жилет со светоотражающей полосой, пузо
+  palych: {
+    palette: { C: '#2a3a6a', s: '#d8a080', e: '#141418', m: '#5a3a2a', O: '#ff8a20', R: '#e8e8e8', T: '#4a4a52', P: '#2a3040', B: '#1a1a1a' },
+    body: [
+      '...CCCCC....',
+      '..CCCCCCCC..',
+      '..ssssss....',
+      '..sssess....',
+      '..ssssss....',
+      '..smmmms....',
+      '...ssss.....',
+      '.OOOTTOOO...',
+      'OOOOTTOOOO..',
+      'RRRRRRRRRR..',
+      'OOOOOOOOOO..',
+      'sOOOOOOOOs..',
+      'sOOOOOOOOs..',
+      '.OOOOOOOO...',
+      '..PPPPPPP...',
+    ],
+  },
+  // Ахмед: грузчик, борода, синий комбинезон
+  akhmed: {
+    palette: { H: '#141010', s: '#c8946c', e: '#141418', b: '#1e1814', U: '#2a4a8a', u: '#22407a', T: '#9a9aa2', P: '#2a4a8a', B: '#3a2a1a' },
+    body: [
+      '....HHH.....',
+      '...HHHHH....',
+      '..HHsssH....',
+      '..Hsssess...',
+      '..bsssss....',
+      '...bbbbb....',
+      '....bbb.....',
+      '..TUTTTUT...',
+      '.TTUTTTUTT..',
+      '.UUUUUUUUU..',
+      '.UUuUUUuUU..',
+      '.sUUUUUUUs..',
+      '.sUUUUUUUs..',
+      '..UUUUUUU...',
+      '..PPPPPPP...',
+    ],
+  },
+  // Гоша с барахолки: шапка, провода на шее
+  gosha: {
+    palette: { K: '#6a2a8a', s: '#e0b898', e: '#141418', c: '#ff3d3d', d: '#2a2a2a', J: '#4a6a4a', j: '#3a5a3a', P: '#3a3a3a', B: '#5a3a2a' },
+    body: [
+      '...KKKKK....',
+      '..KKKKKKK...',
+      '..KKKKKKK...',
+      '..ssssse....',
+      '..ssssss....',
+      '...ssss.....',
+      '..cdcdcdc...',
+      '..JdJcJdJ...',
+      '.JJJJjJJJJ..',
+      '.JJJJjJJJJ..',
+      '.JJJJjJJJJ..',
+      '.sJJJjJJJs..',
+      '.sJJJJJJJs..',
+      '..JJJJJJJ...',
+      '..PPPPPPP...',
+    ],
+  },
+  // Лёва из ломбарда: лысина, очки, кардиган, золотая цепь
+  leva: {
+    palette: { s: '#e0b090', h: '#b8b8b8', e: '#141418', g: '#d8b040', K: '#6a5a4a', k: '#5a4a3a', y: '#ffd166', W: '#e8e0d0', P: '#3a3448', B: '#2a1a1a' },
+    body: [
+      '............',
+      '...sssss....',
+      '..ssssssh...',
+      '..sggsggh...',
+      '..ssssss....',
+      '...ssss.....',
+      '....yyy.....',
+      '..KKWWWKK...',
+      '.KKKWyWKKK..',
+      '.KKKWWWKKK..',
+      '.KkKKKKKkK..',
+      '.sKKKKKKKs..',
+      '.sKKKKKKKs..',
+      '..KKKKKKK...',
+      '..PPPPPPP...',
+    ],
+  },
 };
 
 function paint(scene, key, rows, palette, scale) {
@@ -167,6 +360,18 @@ export function createArt(scene) {
   g.clear();
   g.fillStyle(0xffffff, 1).fillRect(3, 0, 2, 8).fillRect(0, 3, 8, 2);
   g.generateTexture('spark', 8, 8);
+  g.clear();
+  g.lineStyle(2, 0xffffff, 0.8).strokeCircle(10, 10, 8);
+  g.fillStyle(0xffffff, 0.8).fillRect(6, 5, 3, 3);
+  g.generateTexture('bubble', 20, 20);
+  g.clear();
+  g.fillStyle(0xc89a5a, 1).fillRect(0, 0, 44, 36);
+  g.fillStyle(0xa87a3a, 1).fillRect(0, 14, 44, 6).fillRect(19, 0, 6, 36);
+  g.generateTexture('box', 44, 36);
+  g.clear();
+  g.fillStyle(0xc84040, 1).fillRect(0, 0, 44, 36);
+  g.fillStyle(0xffffff, 1).fillRect(4, 14, 36, 8);
+  g.generateTexture('box_fragile', 44, 36);
   g.destroy();
 
   paint(scene, 'bird_0', ['B.....B', '.B...B.', '..BBB..'], { B: '#1a1426' }, 3);
@@ -174,6 +379,7 @@ export function createArt(scene) {
   scene.anims.create({ key: 'bird_fly', frames: [{ key: 'bird_0' }, { key: 'bird_1' }], frameRate: 8, repeat: -1 });
 
   drawArenaPoster(scene);
+  drawOpenMicPoster(scene);
   drawTapePoster(scene);
 }
 
@@ -309,5 +515,47 @@ function drawTapePoster(scene) {
   c.font = '7px "Press Start 2P"';
   c.fillText('СБОРНИК 2009', W / 2, 132);
   c.fillText('ТОЛЬКО ПОДВАЛ', W / 2, 146);
+  tex.refresh();
+}
+
+// Афиша «ПОДВАЛ: OPEN MIC» с портретами выступающих (портреты грузятся в BootScene)
+function drawOpenMicPoster(scene) {
+  const W = 240;
+  const H = 312;
+  const tex = scene.textures.createCanvas('poster_openmic', W, H);
+  const c = tex.getContext();
+  c.fillStyle = '#120a1e';
+  c.fillRect(0, 0, W, H);
+  c.fillStyle = '#ff3d8a';
+  c.fillRect(0, 0, W, 6);
+  c.fillRect(0, H - 6, W, 6);
+  c.textAlign = 'center';
+  c.fillStyle = '#ffffff';
+  c.font = '20px "Press Start 2P"';
+  c.fillText('ПОДВАЛ', W / 2, 36);
+  c.fillStyle = '#3df0ff';
+  c.font = '8px "Press Start 2P"';
+  c.fillText('OPEN MIC · ПТ 20:00', W / 2, 54);
+  const acts = [['portrait_roma', '3g0th2002'], ['portrait_ray', 'RAY'], [null, '???'], ['portrait_adam', 'twinspeak']];
+  acts.forEach(([key, name], i) => {
+    const x = 20 + (i % 2) * 110;
+    const y = 66 + Math.floor(i / 2) * 112;
+    c.fillStyle = '#2a1b3d';
+    c.fillRect(x, y, 90, 90);
+    if (key && scene.textures.exists(key)) {
+      c.imageSmoothingEnabled = false;
+      c.drawImage(scene.textures.get(key).getSourceImage(), x, y, 90, 90);
+    } else {
+      c.fillStyle = '#ff3d8a';
+      c.font = '30px "Press Start 2P"';
+      c.fillText('?', x + 45, y + 60);
+    }
+    c.fillStyle = '#ffd166';
+    c.font = '8px "Press Start 2P"';
+    c.fillText(name, x + 45, y + 104);
+  });
+  c.fillStyle = '#c9c4ee';
+  c.font = '8px "Press Start 2P"';
+  c.fillText('ВХОД 300 ₽', W / 2, H - 14);
   tex.refresh();
 }

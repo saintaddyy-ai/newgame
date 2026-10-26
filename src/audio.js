@@ -200,6 +200,41 @@ const SFX = {
     noise(t, 0.05, { freq: 2500, q: 2, vol: 0.15 }); // щелчок ручки
     creak(t + 0.06, 0.55, 170, 0.06);
   },
+  doorSoft: (t) => {
+    tone(t, 140, 0.1, { vol: 0.15, to: 90 });
+    noise(t, 0.06, { type: 'lowpass', freq: 900, vol: 0.1 });
+  },
+  stepTile: (t) => {
+    noise(t, 0.03, { freq: 2200, q: 2, vol: 0.08 });
+    noise(t + 0.09, 0.03, { freq: 2200, q: 2, vol: 0.025 }); // эхо в маленькой комнате
+  },
+  flush: (t) => {
+    tone(t, 600, 0.08, { type: 'square', vol: 0.04 }); // кнопка
+    noise(t + 0.4, 2.2, { type: 'lowpass', freq: 900, to: 300, vol: 0.18, attack: 0.3 });
+    noise(t + 0.6, 1.6, { type: 'bandpass', freq: 2500, q: 0.6, vol: 0.05, attack: 0.2 });
+  },
+  water: (t) => noise(t, 1.2, { type: 'bandpass', freq: 3000, q: 0.5, vol: 0.1, attack: 0.1 }),
+  washer: (t) => {
+    for (let i = 0; i < 8; i++) tone(t + i * 0.15, 90, 0.12, { type: 'square', vol: 0.06 });
+    noise(t, 1.2, { type: 'lowpass', freq: 300, vol: 0.12, attack: 0.1 });
+  },
+  bubble: (t) => tone(t, 900, 0.08, { vol: 0.05, to: 1800 }),
+  pop: (t) => noise(t, 0.03, { freq: 3000, q: 2, vol: 0.08 }),
+  crash: (t) => {
+    noise(t, 0.4, { type: 'lowpass', freq: 1200, vol: 0.35 });
+    tone(t, 80, 0.3, { vol: 0.3, to: 40 });
+    for (let i = 0; i < 5; i++) noise(t + 0.05 + i * 0.04, 0.05, { freq: 3000 + i * 400, q: 4, vol: 0.06 });
+  },
+  catch: (t) => {
+    tone(t, 140, 0.08, { vol: 0.25, to: 90 });
+    tone(t, 1320, 0.06, { type: 'triangle', vol: 0.05 });
+  },
+  phone: (t) => [0, 0.25, 1.2, 1.45].forEach((d) => tone(t + d, 1250, 0.18, { type: 'square', vol: 0.03 })),
+  register: (t) => {
+    tone(t, 1800, 0.05, { type: 'square', vol: 0.04 });
+    [2637, 3520].forEach((f, i) => tone(t + 0.1 + i * 0.08, f, 0.4, { vol: 0.05 }));
+  },
+  heartbeat: (t) => [0, 0.18].forEach((d) => tone(t + d, 60, 0.15, { vol: 0.35, to: 40 })),
   doorClose: (t) => {
     tone(t, 90, 0.18, { vol: 0.35, to: 50 });
     noise(t, 0.12, { type: 'lowpass', freq: 600, vol: 0.25 });
@@ -335,6 +370,23 @@ export function startAmbience(kind) {
     o.start();
     nodes.push(o);
     loopNoise('lowpass', 150, 0.02);
+  } else if (kind === 'bath') {
+    loopNoise('lowpass', 250, 0.012);
+    const id = setInterval(() => sfx('drip'), 2600);
+    nodes.push({ stop: () => clearInterval(id) });
+  } else if (kind === 'warehouse') {
+    loopNoise('lowpass', 120, 0.05);
+    const o = ctx.createOscillator();
+    o.frequency.value = 120;
+    const g = ctx.createGain();
+    g.gain.value = 0.006;
+    o.connect(g).connect(out);
+    o.start();
+    nodes.push(o);
+  } else if (kind === 'market') {
+    loopNoise('bandpass', 600, 0.05, 0.3); // гул толпы
+    const id = setInterval(() => sfx(Math.random() > 0.5 ? 'pop' : 'coins'), 2300);
+    nodes.push({ stop: () => clearInterval(id) });
   } else if (kind === 'flat') {
     loopNoise('lowpass', 200, 0.015);
   } else if (kind === 'morning') {

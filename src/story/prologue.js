@@ -4,6 +4,7 @@
 import Phaser from 'phaser';
 import { state } from '../state.js';
 import { drawApartment, drawYard, drawGarage } from './backdrops.js';
+import { BATHROOM } from './shared.js';
 import { BEAT, playMusic, currentMusic, stopMusic, sfx } from '../audio.js';
 
 const F = state.flags;
@@ -19,7 +20,7 @@ function clip(s, x, y, w, h) {
 }
 
 // Вид из окна: рассвет над панельками, птицы, лучи солнца
-function windowView(s, c) {
+export function windowView(s, c) {
   const x0 = 180;
   const y0 = 30;
   const w = 600;
@@ -82,7 +83,7 @@ function windowView(s, c) {
 }
 
 // Афиша «Арены» крупно, с бликом света
-function posterView(s, c) {
+export function posterView(s, c) {
   const img = s.add.image(480, 180, 'poster_arena').setScale(0.95).setAngle(-2);
   // Блик света скользит по афише
   const shine = s.add.rectangle(330, 180, 40, 330, 0xffffff, 0.12).setAngle(12).setBlendMode(Phaser.BlendModes.ADD);
@@ -95,6 +96,7 @@ function posterView(s, c) {
 // ---------- Локации ----------
 
 export const LOCATIONS = {
+  bathroom: BATHROOM,
   apartment: {
     title: 'ПОНЕДЕЛЬНИК. 6:40',
     width: 1900,
@@ -103,9 +105,9 @@ export const LOCATIONS = {
     steps: 'stepWood',
     draw: (s) => drawApartment(s, 1900),
     doors: [
-      { id: 'd1', x: 775, w: 58, h: 206, auto: true },
-      { id: 'd2', x: 1375, w: 58, h: 206, auto: true },
-      { id: 'bath', x: 1703, w: 80, h: 200, color: 0xd8d0c0 },
+      { id: 'd1', x: 775, w: 58, h: 206, auto: true, interior: true, inside: 0x4a4f66, insideFloor: 0x4a3a3a },
+      { id: 'd2', x: 1375, w: 58, h: 206, auto: true, interior: true, inside: 0x34463f },
+      { id: 'bath', x: 1703, w: 80, h: 200, color: 0xd8d0c0, interior: true, inside: 0x8ab4c8, insideFloor: 0x5a6a78 },
       { id: 'front', x: 1840, w: 94, h: 210, color: 0x6a3a2a },
     ],
 
@@ -248,14 +250,10 @@ export const LOCATIONS = {
       },
       {
         x: 1703, label: 'Ванная', sfx: 'click',
-        async use({ d, door, wait, sfx: play }) {
+        async use({ door, wait, go }) {
           door('bath', true);
           await wait(300);
-          play('drip');
-          await d.think('Кран капает третий месяц. Сантехник обещал прийти «на днях».');
-          d.close();
-          door('bath', false);
-          await wait(250);
+          go('bathroom', 120);
         },
       },
       {
