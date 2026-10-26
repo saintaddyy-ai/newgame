@@ -1,20 +1,84 @@
 {
-  "_comment": "Голоса персонажей. elevenlabs — voice_id из библиотеки ElevenLabs (заглушки, замени на свои). yandex — имя голоса SpeechKit. think — мысли Марка.",
-  "default": { "elevenlabs": "pNInz6obpgDQGcFmaJgB", "yandex": "filipp", "stability": 0.5, "style": 0.3 },
-  "think":     { "elevenlabs": "pNInz6obpgDQGcFmaJgB", "yandex": "ermil", "stability": 0.7, "style": 0.1, "speed": 0.95 },
-  "Марк":      { "elevenlabs": "pNInz6obpgDQGcFmaJgB", "yandex": "ermil" },
-  "Мама":      { "elevenlabs": "EXAVITQu4vr4xnJCdLTR", "yandex": "alena" },
-  "Дэн":       { "elevenlabs": "ErXwobaYiN019PkySvjV", "yandex": "zahar" },
-  "Баба Валя": { "elevenlabs": "MF3mGyEYCl7XYWbV9V6O", "yandex": "omazh" },
-  "Пацан":     { "elevenlabs": "yoZ06aMxZJJ28mfd3POQ", "yandex": "filipp" },
-  "Рей":       { "elevenlabs": "TxGEqnHWrfWFTfGW9XjX", "yandex": "madirus", "stability": 0.3, "style": 0.7 },
-  "Аркаша":    { "elevenlabs": "yoZ06aMxZJJ28mfd3POQ", "yandex": "filipp", "style": 0.6 },
-  "Стас":      { "elevenlabs": "ErXwobaYiN019PkySvjV", "yandex": "zahar", "stability": 0.8 },
-  "Адам":      { "elevenlabs": "TxGEqnHWrfWFTfGW9XjX", "yandex": "ermil", "stability": 0.8 },
-  "Рома":      { "elevenlabs": "VR6AewLTigWG4xSOukaG", "yandex": "madirus", "stability": 0.6 },
-  "Палыч":     { "elevenlabs": "VR6AewLTigWG4xSOukaG", "yandex": "zahar", "style": 0.6 },
-  "Ахмед":     { "elevenlabs": "ErXwobaYiN019PkySvjV", "yandex": "filipp" },
-  "Тётя Люба": { "elevenlabs": "MF3mGyEYCl7XYWbV9V6O", "yandex": "omazh" },
-  "Гоша":      { "elevenlabs": "yoZ06aMxZJJ28mfd3POQ", "yandex": "filipp", "style": 0.7 },
-  "Лёва":      { "elevenlabs": "VR6AewLTigWG4xSOukaG", "yandex": "zahar" }
+  "_comment": "Голоса персонажей. elevenlabs — voice_id из стандартных голосов ElevenLabs (доступны на бесплатном плане). yandex — имя голоса SpeechKit. think — мысли Марка.",
+  "default": {
+    "elevenlabs": "pNInz6obpgDQGcFmaJgB",
+    "yandex": "filipp",
+    "stability": 0.5,
+    "style": 0.3
+  },
+  "think": {
+    "elevenlabs": "pNInz6obpgDQGcFmaJgB",
+    "yandex": "ermil",
+    "stability": 0.7,
+    "style": 0.1,
+    "speed": 0.95
+  },
+  "Марк": {
+    "elevenlabs": "pNInz6obpgDQGcFmaJgB",
+    "yandex": "ermil"
+  },
+  "Мама": {
+    "elevenlabs": "XrExE9yKIg1WjnnlVkGX",
+    "yandex": "alena"
+  },
+  "Дэн": {
+    "elevenlabs": "ErXwobaYiN019PkySvjV",
+    "yandex": "zahar"
+  },
+  "Баба Валя": {
+    "elevenlabs": "Xb7hH8MSUJpSbSDYk0k2",
+    "yandex": "omazh"
+  },
+  "Пацан": {
+    "elevenlabs": "TX3LPaxmHKxFdv7VOQHJ",
+    "yandex": "filipp"
+  },
+  "Рей": {
+    "elevenlabs": "bIHbv24MWmeRgasZH58o",
+    "yandex": "madirus",
+    "stability": 0.3,
+    "style": 0.7
+  },
+  "Аркаша": {
+    "elevenlabs": "iP95p4xoKVk53GoZ742B",
+    "yandex": "filipp",
+    "style": 0.6
+  },
+  "Стас": {
+    "elevenlabs": "SAz9YHcvj6GT2YYXdXww",
+    "yandex": "zahar",
+    "stability": 0.8
+  },
+  "Адам": {
+    "elevenlabs": "JBFqnCBsd6RMkjVDRZzb",
+    "yandex": "ermil",
+    "stability": 0.8
+  },
+  "Рома": {
+    "elevenlabs": "N2lVS1w4EtoT3dr4eOWO",
+    "yandex": "madirus",
+    "stability": 0.6
+  },
+  "Палыч": {
+    "elevenlabs": "nPczCjzI2devNBz1zQrb",
+    "yandex": "zahar",
+    "style": 0.6
+  },
+  "Ахмед": {
+    "elevenlabs": "ErXwobaYiN019PkySvjV",
+    "yandex": "filipp"
+  },
+  "Тётя Люба": {
+    "elevenlabs": "cgSgspJ2msm6clMCkdW9",
+    "yandex": "omazh"
+  },
+  "Гоша": {
+    "elevenlabs": "cjVigY5qzO86Huf0OWal",
+    "yandex": "filipp",
+    "style": 0.7
+  },
+  "Лёва": {
+    "elevenlabs": "onwK4e9ZLuTAKqWW03F9",
+    "yandex": "zahar"
+  }
 }

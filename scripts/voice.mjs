@@ -4,6 +4,8 @@
 //   npm run voice -- --dry             показать, сколько реплик и символов, ничего не генерируя
 //   ELEVENLABS_API_KEY=... npm run voice
 //   VOICE_PROVIDER=yandex YANDEX_API_KEY=... npm run voice
+//   npm run voice -- --redo=Мама,Рей   переозвучить персонажей после смены голоса
+//   В облачной среде Claude Code: NODE_USE_ENV_PROXY=1 (Node ходит через прокси)
 //
 // Скрипт находит в src/story/*.js вызовы d.say('Имя', '...') и d.think('...'),
 // озвучивает только те реплики, которых ещё нет в public/voice, и обновляет manifest.json.
@@ -21,6 +23,8 @@ const VOICES = JSON.parse(fs.readFileSync(path.join(ROOT, 'src/data/voices.json'
 const args = process.argv.slice(2);
 const DRY = args.includes('--dry');
 const ONLY = (args.find((a) => a.startsWith('--only=')) || '').slice(7); // --only=Рей
+// --redo=Мама,Рей — переозвучить персонажей заново (например, после смены голоса)
+const REDO = (args.find((a) => a.startsWith('--redo=')) || '').slice(7).split(',').filter(Boolean);
 const PROVIDER = process.env.VOICE_PROVIDER || 'elevenlabs';
 
 const STR = String.raw`'((?:[^'\\]|\\.)*)'`;
@@ -82,6 +86,7 @@ async function main() {
   let lines = collect();
   if (ONLY) lines = lines.filter((l) => l.speaker === ONLY);
   fs.mkdirSync(OUT, { recursive: true });
+  if (!DRY) for (const l of lines) if (REDO.includes(l.speaker)) fs.rmSync(path.join(OUT, `${l.id}.mp3`), { force: true });
   const todo = lines.filter((l) => !fs.existsSync(path.join(OUT, `${l.id}.mp3`)));
   const chars = todo.reduce((n, l) => n + l.text.length, 0);
   console.log(`Реплик всего: ${lines.length}. Не озвучено: ${todo.length} (${chars} символов).`);
