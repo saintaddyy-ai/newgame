@@ -14,7 +14,7 @@ export function paintTitle(scene) {
   setTimeOverride(null);
   W.sky();
   W.layer(0.2, (p, ctx) => farCity(p, { ...ctx, base: 205 }, { seed: 7, density: 1.5 }), { name: 'far' });
-  W.layer(0.45, (p, ctx) => midBlocks(p, { ...ctx, base: 238 }, { seed: 9, trees: false }), { name: 'mid' });
+  W.layer(0.45, (p, ctx) => midBlocks(p, { ...ctx, base: 236 }, { seed: 9, trees: false, k: 0.26 }), { name: 'mid' });
   W.layer(1, (p, ctx) => {
     // Край крыши на переднем плане, антенна, провода
     p.rect(0, 236, ctx.w, 40, 0x1a1626);
@@ -138,3 +138,104 @@ export function crowdBackTextures(scene) {
 }
 
 export { GROUND, ART };
+
+// Вокальная будка в гараже: поролон «яичной ячейкой», окно в «аппаратную» (там Дэн у компа)
+export function paintBooth(scene) {
+  const key = 'studio_booth';
+  if (scene.textures.exists(key)) return key;
+  const p = new Pix(480, 270);
+  const r = rng(21);
+  for (let y = 0; y < 270; y += 6) for (let x = (y / 6) % 2 ? 0 : 3; x < 480; x += 6) {
+    p.rect(x, y, 6, 6, 0x15121f);
+    p.rect(x + 1, y + 1, 4, 4, 0x1e1a2c);
+    p.set(x + 1, y + 1, 0x2a2438);
+    p.set(x + 4, y + 4, 0x0e0c16);
+  }
+  // Окно в аппаратную: силуэт Дэна, монитор светится
+  block(p, 300, 40, 140, 80, 0x2a2430);
+  p.rect(304, 44, 132, 72, 0x0c0a14);
+  p.rect(380, 70, 40, 26, 0x3df0ff);
+  p.tint(370, 60, 60, 46, 0x3df0ff, 0.15);
+  p.ellipse(350, 74, 8, 9, 0x1a1420);
+  p.rect(338, 82, 24, 34, 0x1a1420);
+  p.rect(340, 70, 20, 4, 0x2a2a30);
+  p.line(304, 44, 330, 116, mix(0x0c0a14, 0xffffff, 0.06));
+  // Пол и ковёр
+  p.rect(0, 230, 480, 40, 0x2a2026);
+  p.rect(120, 236, 220, 30, 0x5a2a3a);
+  for (let x = 124; x < 336; x += 6) p.set(x, 250, 0x7a3a4a);
+  // Светодиодная лента
+  for (let x = 0; x < 480; x++) p.set(x, 2, x % 40 < 20 ? 0xff3d8a : 0x3df0ff);
+  p.tint(0, 3, 480, 3, 0xff3d8a, 0.15);
+  graffitiTag(p, 40, 30, 0x3df0ff, r);
+  p.texture(scene, key);
+  return key;
+}
+
+// Разгрузка на складе: стена с профнастилом, стеллажи, лента конвейера (пол на 440 экрана)
+export function paintWarehouseGame(scene) {
+  const key = 'wh_game_bg';
+  if (!scene.textures.exists(key)) {
+    const p = new Pix(480, 270);
+    const r = rng(8);
+    const F = 220;
+    const wr = ramp(0x6a7078);
+    p.rect(0, 0, 480, F, wr[2]);
+    for (let x = 0; x < 480; x += 4) p.vline(x, 24, F - 24, x % 8 ? wr[1] : wr[3]);
+    p.rect(0, 0, 480, 24, 0x2a2c32);
+    for (let x = 0; x < 480; x += 60) {
+      p.line(x, 24, x + 30, 4, 0x4a4a52);
+      p.line(x + 30, 4, x + 60, 24, 0x4a4a52);
+    }
+    for (let x = 30; x < 480; x += 140) {
+      block(p, x, 28, 50, 3, 0xe8f4ff);
+      p.tint(x - 20, 31, 90, 60, 0xe8f4ff, 0.08);
+    }
+    for (let x = 20; x < 480; x += 150) {
+      p.rect(x, 50, 3, F - 50, 0x2a5aa8);
+      p.rect(x + 100, 50, 3, F - 50, 0x2a5aa8);
+      for (let y = 80; y < F; y += 44) {
+        p.rect(x, y, 103, 3, 0xff8a20);
+        for (let b = x + 5; b < x + 95; b += 24) if (r() < 0.85) {
+          const bh = 14 + Math.floor(r() * 10);
+          block(p, b, y - bh, 20, bh, 0xc89a5a, { top: 1 });
+        }
+      }
+    }
+    p.tint(0, 0, 480, F, 0x1a1c24, 0.35);
+    p.rect(0, F, 480, 270 - F, 0x3a3c42);
+    p.speckle(0, F, 480, 50, [0x32343a, 0x44464c], 0.1, r);
+    for (let x = 0; x < 480; x += 40) p.rect(x, F + 20, 20, 2, 0xd8b040);
+    // Лента конвейера
+    block(p, 70, 180, 410, 15, 0x1a1c20);
+    block(p, 70, 195, 410, 25, 0x2a2a30);
+    for (let x = 76; x < 480; x += 30) p.rect(x, 196, 3, 23, 0x3a3a42);
+    p.texture(scene, key);
+  }
+  return key;
+}
+
+// Коробки для разгрузки (в масштабе: 0,6 м)
+export function boxTextures(scene) {
+  const mk = (key, fragile) => {
+    const p = new Pix(24, 20);
+    block(p, 1, 2, 22, 17, 0xc89a5a, { top: 1 });
+    p.hline(2, 8, 20, 0xa87a3a);
+    p.rect(10, 2, 4, 17, 0xd8b070);
+    if (fragile) {
+      p.rect(3, 10, 18, 6, 0xc84040);
+      p.rect(5, 12, 14, 2, 0xffffff);
+    }
+    // Увеличиваем ×2 прямо в текстуре — сцены используют её «как есть»
+    const cv = document.createElement('canvas');
+    cv.width = 48;
+    cv.height = 40;
+    const g = cv.getContext('2d');
+    g.imageSmoothingEnabled = false;
+    g.drawImage(p.canvas(), 0, 0, 48, 40);
+    if (scene.textures.exists(key)) scene.textures.remove(key);
+    scene.textures.addCanvas(key, cv);
+  };
+  mk('box', false);
+  mk('box_fragile', true);
+}

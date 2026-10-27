@@ -6,6 +6,7 @@ import { m, block, panels, flatWindow, litWindow, balcony, entrance, garage, car
 import { farCity, midBlocks, yardGround } from './common.js';
 import { mix, rng, ramp } from '../color.js';
 import { GROUND } from '../pix.js';
+import { quality } from '../quality.js';
 
 const FACADE = GROUND - 7; // основание стен и предметов за линией, где ходит герой
 
@@ -174,8 +175,8 @@ export function paintYard(scene, width, { time = 'night', min, merc = false, ope
     });
   }, { name: 'main' });
 
-  // Передний план: столб и кусты у нижнего края
-  W.layer(1.18, (p, ctx) => {
+  // Передний план: стволы и кусты у нижнего края (только на высокой графике)
+  if (quality() === 'high') W.layer(1.18, (p, ctx) => {
     const r = rng(5);
     for (let x = 60; x < ctx.w; x += 260 + r() * 200) bush(p, x, ctx.h + 6, 40, { r, c: 0x1e2a22 });
     // Тёмный ствол дерева на переднем плане — редко, чтобы не мешать

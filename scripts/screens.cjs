@@ -37,7 +37,8 @@ const SPOTS = [
   const shot = (n) => p.screenshot({ path: `${OUT}/${n}.png` });
   await shot('01-title');
   await p.keyboard.press('3'); // «Сразу Эпизод 2»
-  await p.waitForTimeout(2500);
+  await p.waitForFunction(() => game.scene.getScene('Location')?.sys.isActive() && game.scene.getScene('Location').player, null, { timeout: 30000 });
+  await p.waitForTimeout(1000);
   // Закрываем вступление
   for (let i = 0; i < 40; i++) {
     const busy = await p.evaluate(() => { const s = game.scene.getScenes(true)[0]; return s.busy || (s.dialogue && s.dialogue.active); });
@@ -53,6 +54,8 @@ const SPOTS = [
       s.scene.restart({ loc, spawnX: x });
     }, [loc, x, min, day]);
     await p.waitForTimeout(1800);
+    // Убираем входящие звонки и баннеры — для чистого кадра
+    await p.evaluate(() => { const s = game.scene.getScenes(true)[0]; if (s.phone) { s.phone.queue = []; s.phone.hide(true); } });
     // Пропускаем возможные сценки при входе
     for (let i = 0; i < 30; i++) {
       const busy = await p.evaluate(() => { const s = game.scene.getScenes(true)[0]; return s.dialogue && s.dialogue.active; });
@@ -66,7 +69,7 @@ const SPOTS = [
   // Диалог, тетрадь, телефон — во дворе
   await p.evaluate(() => { window.__state.time.min = 19 * 60; game.scene.getScenes(true)[0].scene.restart({ loc: 'yard', spawnX: 900 }); });
   await p.waitForTimeout(1800);
-  await p.evaluate(() => { const s = game.scene.getScenes(true)[0]; s.dialogue.say('Стас', 'Бро, это не проблема. Это контент.'); });
+  await p.evaluate(() => { const s = game.scene.getScenes(true)[0]; if (s.phone) { s.phone.queue = []; s.phone.hide(true); } s.dialogue.say('Стас', 'Бро, это не проблема. Это контент.'); });
   await p.waitForTimeout(1500);
   await shot('20-dialogue');
   await p.keyboard.press('Space'); await p.waitForTimeout(300); await p.keyboard.press('Space');

@@ -2,7 +2,7 @@
 // интерьеры (шаурма, барбер, тату, одежда, три кафе, «Проявка», «Кран-Сервис», ломбард),
 // метро, «Подвал», афтепати, крыши, клуб, ночной порт, промзона, «Речная», «Арена».
 import { drawApartment, drawYard, drawGarage, drawPawnshop, drawWarehouse } from '../backdrops.js';
-import { drawStreet, drawInterior, drawMetro, drawRooftop, drawPort, drawPromzona, drawRechnaya, metroEntrance, neon, isDarkNow, trainArrive } from './scenery.js';
+import { drawStreet, drawInterior, drawMetro, drawRooftop, drawPort, drawPromzona, drawRechnaya, isDarkNow, trainArrive } from './scenery.js';
 import { F, state, hasItem, now, at, day, exit, once, pickOne, quest, questStatus } from './common.js';
 import { isAt, whereIs, studioOccupant, isNight } from './world.js';
 import { castKey, personTexture, randomSpec } from './people.js';

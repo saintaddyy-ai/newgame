@@ -3,6 +3,8 @@ import { unlockAudio, sfx } from '../audio.js';
 import { state, resetState, readSave, loadGame, addLine, saveGame } from '../state.js';
 import { paintTitle } from '../gfx/places/scenes.js';
 import { addActor, pose } from '../gfx/actors.js';
+import { Panel } from '../ui/frame.js';
+import { applyLook } from '../gfx/fx.js';
 import { startEpisode1 } from '../story/episode1.js';
 import { startEpisode2 } from '../story/episode2/main.js';
 
@@ -52,8 +54,9 @@ export class TitleScene extends Phaser.Scene {
   create() {
     paintTitle(this);
     // Марк сидит на краю крыши и смотрит на город
-    const mark = addActor(this, 300, 506, 'mark', { depth: 2 });
+    const mark = addActor(this, 180, 506, 'mark', { depth: 2 });
     pose(mark, 'sit');
+    applyLook(this);
     this.add.particles(0, -20, 'drop', {
       x: { min: -100, max: 1060 }, lifespan: 900, speedY: { min: 700, max: 900 }, speedX: -120,
       alpha: { start: 0.35, end: 0.1 }, quantity: 3, frequency: 16,
@@ -77,6 +80,9 @@ export class TitleScene extends Phaser.Scene {
     items.push({ label: 'СРАЗУ ЭПИЗОД 2', run: () => this.episode2() });
 
     this.sel = 0;
+    // Пиксельная панель под меню
+    const mh = items.length * 40 + 24;
+    new Panel(this, 300, 300, 360, mh, { accent: 0xff3d8a, alpha: 0.82 }).objects.forEach((o) => o.setDepth(9));
     this.menu = items.map((it, i) => {
       const t = this.add.text(480, 320 + i * 40, it.label, { fontFamily: '"Press Start 2P"', fontSize: '15px', color: '#c9c4ee' }).setOrigin(0.5).setDepth(10);
       t.setInteractive({ useHandCursor: true }).on('pointerover', () => this.select(i)).on('pointerdown', () => this.pick(i));

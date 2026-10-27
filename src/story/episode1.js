@@ -1233,6 +1233,13 @@ async function rayDeal(ctx) {
     if (c2 === 0) {
       d.close();
       const sold = await pickLines(3, 'ОТДАТЬ РЕЮ');
+      if (!sold) {
+        // Передумал в последний момент — строчки остаются при мне
+        state.stats.honesty += 1;
+        await d.think('Смотрю на страницу и закрываю тетрадь. Не могу. Это не товар.');
+        await d.say('Рей', '(надевает очки обратно) Пайка… Но я понял. Своё не продают. Пока.');
+        return;
+      }
       sold.forEach((l) => {
         const i = state.lines.indexOf(l);
         if (i >= 0) state.lines.splice(i, 1);

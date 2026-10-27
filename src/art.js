@@ -3,6 +3,7 @@
 import { ensureActor } from './gfx/actors.js';
 import { CAST_SPECS } from './gfx/cast.js';
 import { portraitKey } from './gfx/portraits.js';
+import { boxTextures } from './gfx/places/scenes.js';
 
 function paint(scene, key, rows, palette, scale) {
   const tex = scene.textures.createCanvas(key, rows[0].length * scale, rows.length * scale);
@@ -38,15 +39,8 @@ export function createArt(scene) {
   g.lineStyle(2, 0xffffff, 0.8).strokeCircle(10, 10, 8);
   g.fillStyle(0xffffff, 0.8).fillRect(6, 5, 3, 3);
   g.generateTexture('bubble', 20, 20);
-  g.clear();
-  g.fillStyle(0xc89a5a, 1).fillRect(0, 0, 44, 36);
-  g.fillStyle(0xa87a3a, 1).fillRect(0, 14, 44, 6).fillRect(19, 0, 6, 36);
-  g.generateTexture('box', 44, 36);
-  g.clear();
-  g.fillStyle(0xc84040, 1).fillRect(0, 0, 44, 36);
-  g.fillStyle(0xffffff, 1).fillRect(4, 14, 36, 8);
-  g.generateTexture('box_fragile', 44, 36);
   g.destroy();
+  boxTextures(scene);
 
   // Мягкое пятно света для фонарей, окон и кислотного режима
   const glow = scene.textures.createCanvas('glow', 128, 128);

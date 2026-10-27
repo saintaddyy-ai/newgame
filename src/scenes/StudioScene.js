@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { addActor, play as actorPlay } from '../gfx/actors.js';
+import { paintBooth } from '../gfx/places/scenes.js';
 import { state, TAGS, addLine } from '../state.js';
 import { BEAT, audioCtx, loadBuffer, playBuffer, playMusic, stopMusic, sfx } from '../audio.js';
 import { karaokeTimeline, saveDemo, playDemo } from '../demos.js';
@@ -60,14 +62,13 @@ export class StudioScene extends Phaser.Scene {
   }
 
   drawBooth() {
-    const g = this.add.graphics();
-    g.fillStyle(0x0c0a16, 1).fillRect(0, 0, 960, 540);
-    // Акустический поролон
-    for (let y = 0; y < 540; y += 40) {
-      for (let x = (y / 40) % 2 ? 0 : 20; x < 960; x += 40) {
-        g.fillStyle(0x15121f, 1).fillTriangle(x, y + 40, x + 20, y, x + 40, y + 40);
-      }
-    }
+    // Будка: поролон, окно в аппаратную, Марк в наушниках у микрофона
+    this.add.image(0, 0, paintBooth(this)).setOrigin(0).setScale(2);
+    this.markActor = addActor(this, 150, 520, 'mark', { scale: 1.1 });
+    actorPlay(this.markActor, 'mic');
+    const st = this.add.graphics();
+    st.fillStyle(0x2a2a2a, 1).fillRect(214, 330, 4, 190).fillRect(196, 516, 40, 4).fillRect(214, 330, 22, 4);
+    st.fillStyle(0x8a8a9a, 1).fillRect(230, 312, 14, 26);
     this.bars = [];
     for (let i = 0; i < 48; i++) {
       this.bars.push(this.add.rectangle(10 + i * 20, 540, 14, 40, i % 2 ? 0xff3d8a : 0x3df0ff, 0.15).setOrigin(0, 1));

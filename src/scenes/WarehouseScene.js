@@ -3,6 +3,7 @@ import { state } from '../state.js';
 import { BEAT, audioCtx, loadBuffer, playBuffer, sfx } from '../audio.js';
 import { addActor } from '../gfx/actors.js';
 import { ART } from '../gfx/pix.js';
+import { paintWarehouseGame } from '../gfx/places/scenes.js';
 
 const ZONE_X = 300;
 const START_X = 1010;
@@ -27,13 +28,8 @@ export class WarehouseScene extends Phaser.Scene {
     this.done = false;
     this.cameras.main.fadeIn(400, 7, 6, 13);
 
-    const g = this.add.graphics();
-    g.fillStyle(0x3a3e46, 1).fillRect(0, 0, 960, 540);
-    for (let x = 0; x < 960; x += 120) g.fillStyle(0x34383f, 1).fillRect(x, 0, 6, 540);
-    g.fillStyle(0x2a2c30, 1).fillRect(0, 440, 960, 100);
-    // Лента
-    g.fillStyle(0x1a1c20, 1).fillRect(140, 360, 900, 30);
-    g.fillStyle(0x2a2a30, 1).fillRect(140, 390, 900, 50);
+    // Склад и лента конвейера — пиксельный фон
+    this.add.image(0, 0, paintWarehouseGame(this)).setOrigin(0).setScale(2);
     this.rollers = [];
     for (let x = 150; x < 1040; x += 30) this.rollers.push(this.add.rectangle(x, 375, 4, 26, 0x4a4a52));
     // Зона ловли

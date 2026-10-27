@@ -42,14 +42,14 @@ export function farCity(p, ctx, { seed = 3, density = 1 } = {}) {
 }
 
 // Средний план: соседние панельки через двор, деревья, гаражи вдали
-export function midBlocks(p, ctx, { seed = 5, garages = false, trees = true, gap = 0 } = {}) {
+export function midBlocks(p, ctx, { seed = 5, garages = false, trees = true, gap = 0, k = 0.42 } = {}) {
   const r = rng(seed);
   const { base, dark } = ctx;
   const lit = dark > 0.25 ? 0.18 + dark * 0.14 : 0;
   let x = -20 + gap;
   while (x < ctx.w) {
     const sec = 2 + Math.floor(r() * 3);
-    const b = panelBlock(p, x, base, { floors: 9, sections: sec, k: 0.42, c: [0x9a948a, 0x8a8e96, 0xa8a090, 0xb09a88][Math.floor(r() * 4)], r, lit, emit: ctx.emit });
+    const b = panelBlock(p, x, base, { floors: 9, sections: sec, k, c: [0x9a948a, 0x8a8e96, 0xa8a090, 0xb09a88][Math.floor(r() * 4)], r, lit, emit: ctx.emit });
     x += b.w + 24 + r() * 70;
   }
   // Земля двора вдали

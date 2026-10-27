@@ -210,7 +210,10 @@ export function paintStreet(scene, width, spec = {}) {
     (spec.features || []).forEach((f) => FEATURES[f.type]?.(p, ctx, f));
     // Припаркованные на тротуаре машины (как в жизни), урны, люки
     (spec.parked || []).forEach(([x, c, dir]) => car(p, Math.round(x / 2), FACADE + 3, { c, dir, r }));
-    for (let x = 60 + Math.floor(r() * 80); x < wa; x += 220 + Math.floor(r() * 160)) manhole(p, x, SIDEWALK_END + 12);
+    for (let x = 60 + Math.floor(r() * 80); x < wa; x += 220 + Math.floor(r() * 160)) {
+      manhole(p, x, SIDEWALK_END + 12);
+      if (r() < 0.5) scene.steamSpots?.push([x * 2, (SIDEWALK_END + 12) * 2]);
+    }
     ctx.post.push((pp) => {
       for (let x = 100; x < wa; x += 300 + Math.floor(r() * 200)) puddle(pp, x, SIDEWALK_END + 8 + Math.floor(r() * 6), 30 + Math.floor(r() * 30), 4);
     });

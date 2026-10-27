@@ -1,4 +1,6 @@
 import Phaser from 'phaser';
+import { QUALITY_LABEL } from '../gfx/quality.js';
+import { applyLook } from '../gfx/fx.js';
 import { state, clockShort, saveSettings, DAYS } from '../state.js';
 import { sfx, setVolumes, audioCtx, decodeBlob, playBuffer } from '../audio.js';
 import { voiceSettings } from '../voice.js';
@@ -1014,6 +1016,7 @@ export class Phone {
       { label: 'Скорость текста', value: speed[st.textSpeed] || 'нормально', change: (d) => (st.textSpeed = cycle([40, 22, 10], st.textSpeed, d)) },
       { label: 'Автотюн в студии', value: at[st.autotune], change: (d) => (st.autotune = cycle(['off', 'light', 'hard'], st.autotune, d)) },
       { label: 'Наушники в студии', value: st.headphones ? 'да' : 'нет', change: () => (st.headphones = !st.headphones) },
+      { label: 'Графика', value: QUALITY_LABEL[st.graphics || 'high'], change: (d) => (st.graphics = cycle(['low', 'medium', 'high'], st.graphics || 'high', d)) },
       { label: 'Обои', value: String((state.phone.wallpaper % WALLPAPERS.length) + 1), change: (d) => (state.phone.wallpaper = (state.phone.wallpaper + d + WALLPAPERS.length) % WALLPAPERS.length) },
     ];
   }
@@ -1021,8 +1024,8 @@ export class Phone {
   page_settings() {
     this.header('НАСТРОЙКИ', 0x9a96b8);
     this.settingsRows().forEach((r, i) => {
-      const y = 54 + i * 40;
-      this.row(y, 36, () => {
+      const y = 50 + i * 36;
+      this.row(y, 32, () => {
         this.text(14, y + 10, r.label, { fontSize: '12px' });
         const minus = this.text(SW - 98, y + 8, '◀', { fontSize: '13px', color: '#9a96b8' });
         this.text(SW - 58, y + 10, r.value, { fontSize: '12px', color: '#ffd166' }).setOrigin(0.5, 0);
@@ -1035,7 +1038,14 @@ export class Phone {
   }
 
   changeSetting(i, d) {
+    const before = state.settings.graphics;
     this.settingsRows()[i].change(d);
+    if (state.settings.graphics !== before) {
+      // Плёночный эффект — сразу; остальное (облака, передний план, частицы) — со следующей локации
+      this.scene.children.list.filter((o) => o.depth === 985 || o.depth === 986).forEach((o) => o.destroy());
+      applyLook(this.scene);
+      this.scene.showToast?.('ГРАФИКА', `${QUALITY_LABEL[state.settings.graphics]} — полностью со следующей локации`, '#9a96b8');
+    }
     applySettings();
     saveSettings();
     sfx('tap');

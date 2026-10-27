@@ -136,7 +136,7 @@ export function makeWorld(scene, width, { min, time = 'night', outdoor = true, k
       remember(scene, k);
       scene.add.image(0, 0, k).setOrigin(0).setScale(ART).setScrollFactor(0).setDepth(-100);
       // Облака плывут медленно
-      if (clouds && quality() !== 'low') {
+      if (clouds && quality() === 'high') {
         const ck = `clouds_${bucket}`;
         if (!scene.textures.exists(ck)) {
           const p = new Pix(480, 80);
@@ -186,14 +186,29 @@ export function makeWorld(scene, width, { min, time = 'night', outdoor = true, k
         });
         ctx.emitFns.forEach((fn) => fn(p, dk));
         ctx.post.forEach((fn) => fn(p));
-        p.texture(scene, k);
-        scene.textures.get(k).__lights = ctx.lights;
+        // Обрезаем пустые (прозрачные) полосы сверху и снизу — меньше лишней заливки
+        let top = 0;
+        let bot = p.h - 1;
+        const rowEmpty = (y) => {
+          for (let x = 0; x < p.w; x++) if (p.d[y * p.w + x] >>> 24) return false;
+          return true;
+        };
+        while (top < bot && rowEmpty(top)) top++;
+        while (bot > top && rowEmpty(bot)) bot--;
+        if (top > 0 || bot < p.h - 1) {
+          const cropped = new Pix(p.w, bot - top + 1);
+          cropped.d.set(p.d.subarray(top * p.w, (bot + 1) * p.w));
+          cropped.texture(scene, k);
+        } else p.texture(scene, k);
+        const tx = scene.textures.get(k);
+        tx.__lights = ctx.lights;
+        tx.__top = top;
       } else {
         // Повторный вход: картинка из кэша, но свет надо знать заново
         ctx.lights = scene.textures.get(k).__lights || [];
       }
       remember(scene, k);
-      const img = scene.add.image(0, 0, k).setOrigin(0).setScale(ART).setScrollFactor(f, 1).setDepth(front ? 40 : depth);
+      const img = scene.add.image(0, (scene.textures.get(k).__top || 0) * ART, k).setOrigin(0).setScale(ART).setScrollFactor(f, 1).setDepth(front ? 40 : depth);
       if (f === 1 && !front && depth < 0) {
         ctx.lights.forEach((L) => {
           const s = { x: L.x * ART, y: L.y * ART, r: L.r * ART, color: L.color ?? 0xffd8a0, flicker: L.flicker, glow: L.glow !== false, ground: (L.ground ?? L.y) * ART };

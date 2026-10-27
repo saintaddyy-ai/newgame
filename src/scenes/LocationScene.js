@@ -4,6 +4,7 @@ import { Notebook } from '../ui/Notebook.js';
 import { DemoPC } from '../ui/DemoPC.js';
 import { Phone } from '../ui/Phone.js';
 import { uiContainer } from '../ui/pin.js';
+import { Panel, keyCap } from '../ui/frame.js';
 import { state, addLine, TAGS, ITEMS, giveItem, saveGame, bankTx } from '../state.js';
 import { getLocation, phaseLabel, advanceTime, useItem, sceneHooks } from '../story/index.js';
 import { sfx, startAmbience, stopAmbience, currentMusic, BEAT } from '../audio.js';
@@ -13,6 +14,9 @@ import * as phoneApi from '../phone/model.js';
 import { addActor, idle, walk, talk, pose, startBlinks, isWalking } from '../gfx/actors.js';
 import { lightSprite } from '../gfx/world.js';
 import { buildDoor, swingDoor } from '../gfx/doors.js';
+import { rain, fog, snow, dust } from '../gfx/weather.js';
+import { leaves, steam, distantWalkers, skyBirds } from '../gfx/life.js';
+import { applyLook, aberration } from '../gfx/fx.js';
 
 export const FLOOR = 470;
 const SPEED = 260;
@@ -43,10 +47,12 @@ export class LocationScene extends Phaser.Scene {
     this.stepTimer = 0;
     this.lastPrompt = null;
     this.sneaking = false;
+    this.turning = false;
     this.zonesFired = new Set();
     this.autoLights = undefined;
     this.lightEnv = undefined;
     this.doorSpots = {};
+    this.steamSpots = [];
     this.__actors = new Set();
     const cfg = this.cfg;
 
@@ -80,7 +86,20 @@ export class LocationScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12, 0, 40);
 
     if (cfg.foreground) cfg.foreground(this);
-    if (val(cfg.rain)) this.makeRain();
+    // Погода и жизнь вокруг
+    const wet = val(cfg.rain);
+    if (wet) rain(this, { heavy: wet === 'heavy' });
+    const wx = val(cfg.weather) || this.defaultWeather();
+    if (wx === 'fog') fog(this);
+    if (wx === 'snow') snow(this);
+    if (wx === 'dust') dust(this, cfg.width);
+    if (this.lightEnv?.outdoor) {
+      if (!wet && (this.lightEnv.dark ?? 0) < 0.6) leaves(this, cfg.width);
+      if ((this.lightEnv.dark ?? 0) < 0.5) skyBirds(this);
+      if (cfg.width > 1200) distantWalkers(this, cfg.width, { n: 2 });
+    }
+    if (this.steamSpots?.length) steam(this, this.steamSpots);
+    applyLook(this);
     // Ночь — синее затемнение поверх мира, свет ламп остаётся
     const night = val(cfg.night);
     this.isNight = !!night || (this.lightEnv?.dark ?? 0) > 0.5;
@@ -93,12 +112,12 @@ export class LocationScene extends Phaser.Scene {
 
     // Подсказка над предметом
     this.prompt = this.add.container(0, 0).setDepth(900).setVisible(false);
-    const key = this.add.rectangle(0, 0, 26, 26, 0xffd166).setStrokeStyle(2, 0x0c0a16);
-    const keyT = this.add.text(0, 0, 'E', { fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#0c0a16' }).setOrigin(0.5);
-    this.promptLabel = this.add.text(20, 0, '', {
-      fontFamily: '"PT Mono", monospace', fontSize: '18px', color: '#ffffff', stroke: '#0c0a16', strokeThickness: 5,
+    const key = keyCap(this, 0, 0, 'E', { size: 24 });
+    this.promptBg = this.add.rectangle(16, 0, 10, 28, 0x0c0a16, 0.78).setOrigin(0, 0.5).setStrokeStyle(2, 0x0b0912);
+    this.promptLabel = this.add.text(24, 0, '', {
+      fontFamily: '"PT Mono", monospace', fontSize: '17px', color: '#ffffff',
     }).setOrigin(0, 0.5);
-    this.prompt.add([key, keyT, this.promptLabel]);
+    this.prompt.add([this.promptBg, key, this.promptLabel]);
     this.tweens.add({ targets: this.prompt, y: '-=4', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
     const title = this.add.text(480, 250, val(cfg.title), {
@@ -293,7 +312,16 @@ export class LocationScene extends Phaser.Scene {
     const dir = (right ? 1 : 0) - (left ? 1 : 0);
     // Shift зажат — Марк крадётся (и стоя тоже не привлекает внимания)
     this.setSneak(k.shift.isDown);
-    if (dir) {
+    // Разворот: короткий кадр «анфас», когда меняем направление
+    if (dir && (dir < 0) !== this.player.flipX && !this.turning) {
+      this.turning = true;
+      pose(this.player, 'turn');
+      this.time.delayedCall(70, () => {
+        this.turning = false;
+        this.player.setFlipX(dir < 0);
+      });
+    }
+    if (dir && !this.turning) {
       const speed = this.sneaking ? SNEAK_SPEED : SPEED;
       this.player.x = Phaser.Math.Clamp(this.player.x + dir * speed * (dt / 1000), 40, this.cfg.width - 40);
       this.player.setFlipX(dir < 0);
@@ -321,6 +349,7 @@ export class LocationScene extends Phaser.Scene {
       this.prompt.x = it.x - 14;
       this.prompt.y = it.y ?? top;
       this.promptLabel.setText(it.label);
+      this.promptBg.setSize(this.promptLabel.width + 18, 28);
       const cam = this.cameras.main;
       const right = cam.scrollX + 960 - 40 - this.promptLabel.width;
       if (this.prompt.x > right) this.prompt.x = right;
@@ -491,13 +520,19 @@ export class LocationScene extends Phaser.Scene {
     list.forEach((c) => {
       if (c.type === 'pigeons') {
         for (let i = 0; i < (c.n || 4); i++) {
-          const p = this.add.sprite(c.x + i * 26 + Phaser.Math.Between(-6, 6), (c.y ?? FLOOR) + 2, 'pigeon_0').setOrigin(0.5, 1).setDepth(12);
+          const p = this.add.sprite(c.x + i * 26 + Phaser.Math.Between(-6, 6), (c.y ?? FLOOR) + 2, 'pigeon_0').setOrigin(0.5, 1).setDepth(12).setScale(2);
           p.setFlipX(Math.random() > 0.5);
-          this.tweens.add({ targets: p, angle: { from: 0, to: 18 }, duration: 220, yoyo: true, repeat: -1, repeatDelay: 500 + Math.random() * 1500, delay: Math.random() * 1000 });
+          // Клюёт: голова вниз-вверх, иногда переходит на шаг
+          p.__peck = this.time.addEvent({ delay: 400 + Math.random() * 900, loop: true, callback: () => {
+            if (!p.active || p.texture.key.startsWith('bird')) return;
+            p.setTexture(p.texture.key === 'pigeon_0' ? 'pigeon_1' : 'pigeon_0');
+            if (Math.random() < 0.15) this.tweens.add({ targets: p, x: p.x + (p.flipX ? -6 : 6), duration: 200 });
+            if (Math.random() < 0.1) p.setFlipX(!p.flipX);
+          } });
           this.critters.push({ kind: 'pigeon', s: p, home: p.x });
         }
       } else if (c.type === 'cat') {
-        const cat = this.add.sprite(c.x, c.y ?? FLOOR, 'cat_0').setOrigin(0.5, 1).setDepth(c.depth ?? 6).setFlipX(!!c.flip);
+        const cat = this.add.sprite(c.x, c.y ?? FLOOR, 'cat_0').setOrigin(0.5, 1).setDepth(c.depth ?? 6).setFlipX(!!c.flip).setScale(2);
         this.time.addEvent({ delay: 900, loop: true, callback: () => cat.setTexture(cat.texture.key === 'cat_0' ? 'cat_1' : 'cat_0') });
         this.critters.push({ kind: 'cat', s: cat });
       }
@@ -511,7 +546,8 @@ export class LocationScene extends Phaser.Scene {
         c.gone = true;
         sfx('flap');
         this.tweens.killTweensOf(c.s);
-        c.s.setAngle(0).setTexture('bird_0').play('bird_fly').setScale(1.4);
+        c.s.__peck?.remove();
+        c.s.setAngle(0).setTexture('bird_0').play('bird_fly').setScale(2);
         const dir = this.player.x < c.s.x ? 1 : -1;
         this.tweens.add({ targets: c.s, x: c.s.x + dir * Phaser.Math.Between(300, 600), y: Phaser.Math.Between(40, 160), duration: 1600, ease: 'Quad.out', onComplete: () => c.s.setVisible(false) });
       }
@@ -713,33 +749,35 @@ export class LocationScene extends Phaser.Scene {
   makeHud() {
     // Слева сверху — день и деньги (с Эпизода 1)
     this.info = uiContainer(this, 20, 20, 960);
-    this.infoBg = this.add.rectangle(0, 0, 240, 52, 0x0c0a16, 0.85).setOrigin(0).setStrokeStyle(2, 0x3df0ff);
+    this.infoBg = new Panel(this, 0, 0, 240, 52, { accent: 0x3df0ff, alpha: 0.88 });
     this.dayText = this.add.text(12, 9, '', { fontFamily: '"Press Start 2P"', fontSize: '10px', color: '#3df0ff' });
     this.cashText = this.add.text(12, 28, '', { fontFamily: '"PT Mono", monospace', fontSize: '17px', color: '#ffffff' });
     // Энергия (Эпизод 2): тонкая полоска под деньгами
     this.energyBg = this.add.rectangle(12, 50, 120, 5, 0x2a2838).setOrigin(0);
     this.energyFill = this.add.rectangle(12, 50, 120, 5, 0x8ae6a0).setOrigin(0);
-    this.info.add([this.infoBg, this.dayText, this.cashText, this.energyBg, this.energyFill]);
+    this.info.add([...this.infoBg.objects, this.dayText, this.cashText, this.energyBg, this.energyFill]);
     const btn = (this.hud = uiContainer(this, 892, 34, 960));
-    const bg = this.add.rectangle(0, 0, 100, 44, 0x0c0a16, 0.85).setStrokeStyle(2, 0xffd166);
+    const bgPanel = new Panel(this, -50, -22, 100, 44, { accent: 0xffd166, alpha: 0.88 });
+    const bg = this.add.rectangle(0, 0, 100, 44, 0x000000, 0.001);
     const t = this.add.text(-38, 0, '✎ [Q]', { fontFamily: '"PT Mono", monospace', fontSize: '18px', color: '#ffd166' }).setOrigin(0, 0.5);
     this.bookCount = this.add.text(36, 0, String(state.lines.length), {
       fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#0c0a16', backgroundColor: '#ffd166', padding: { x: 4, y: 3 },
     }).setOrigin(0.5);
-    btn.add([bg, t, this.bookCount]);
+    btn.add([...bgPanel.objects, bg, t, this.bookCount]);
     bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
       if (!this.busy && !this.phone.open) this.notebook.open ? this.notebook.hide() : this.openNotebook();
     });
 
     // Телефон [P] — рядом с тетрадью, с красным кружком непрочитанного
     const pb = (this.phoneBtn = uiContainer(this, 788, 34, 960));
-    const pbg = this.add.rectangle(0, 0, 92, 44, 0x0c0a16, 0.85).setStrokeStyle(2, 0x3df0ff);
+    const pPanel = new Panel(this, -46, -22, 92, 44, { accent: 0x3df0ff, alpha: 0.88 });
+    const pbg = this.add.rectangle(0, 0, 92, 44, 0x000000, 0.001);
     const body = this.add.rectangle(-26, 0, 16, 26, 0x3df0ff).setStrokeStyle(2, 0x0c0a16);
     const scr = this.add.rectangle(-26, -1, 10, 16, 0x0c0a16);
     const pt = this.add.text(-10, 0, '[P]', { fontFamily: '"PT Mono", monospace', fontSize: '18px', color: '#3df0ff' }).setOrigin(0, 0.5);
     this.phoneBadge = this.add.circle(38, -16, 10, 0xff3d3d).setVisible(false);
     this.phoneBadgeT = this.add.text(38, -16, '', { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#ffffff' }).setOrigin(0.5).setVisible(false);
-    pb.add([pbg, body, scr, pt, this.phoneBadge, this.phoneBadgeT]);
+    pb.add([...pPanel.objects, pbg, body, scr, pt, this.phoneBadge, this.phoneBadgeT]);
     pbg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
       if (!this.busy && !this.notebook.open && !this.pc.open) this.phone.toggle();
     });
@@ -848,6 +886,7 @@ export class LocationScene extends Phaser.Scene {
   setAcid(on) {
     const cam = this.cameras.main;
     if (on && !this.acidFx) {
+      aberration(this, 0.035);
       if (cam.postFX) {
         this.acidFx = cam.postFX.addColorMatrix();
         this.acidBarrel = cam.postFX.addBarrel(1);
@@ -881,6 +920,7 @@ export class LocationScene extends Phaser.Scene {
       this.acidTrail?.remove();
       this.acidBlobs?.destroy();
       cam.setRotation(0);
+      aberration(this, 0);
       if (cam.postFX) [this.acidFx, this.acidBarrel, this.acidBloom, this.acidVignette].forEach((f) => f && cam.postFX.remove(f));
       this.acidFx = null;
     }
@@ -896,27 +936,31 @@ export class LocationScene extends Phaser.Scene {
 
   makeToast() {
     this.toast = uiContainer(this, 480, 620, 970);
-    this.toastBg = this.add.rectangle(0, 0, 700, 66, 0x0c0a16, 0.95).setStrokeStyle(2, 0xffd166);
+    this.toastBg = new Panel(this, -350, -33, 700, 66, { accent: 0xffd166, alpha: 0.95 });
     this.toastTitle = this.add.text(0, -14, '', { fontFamily: '"Press Start 2P"', fontSize: '11px', color: '#ffd166' }).setOrigin(0.5);
     this.toastText = this.add.text(0, 12, '', { fontFamily: '"PT Mono", monospace', fontSize: '18px', color: '#ffffff', fontStyle: 'italic' }).setOrigin(0.5);
-    this.toast.add([this.toastBg, this.toastTitle, this.toastText]);
+    this.toast.add([...this.toastBg.objects, this.toastTitle, this.toastText]);
   }
 
   showToast(title, text, color = '#ffd166') {
     this.toastTitle.setText(title).setColor(color);
     this.toastText.setText(text);
-    this.toastBg.setSize(Math.max(420, this.toastText.width + 60), 66);
-    this.toastBg.setStrokeStyle(2, Phaser.Display.Color.HexStringToColor(color).color);
+    const tw = Math.max(420, this.toastText.width + 60);
+    this.toastBg.x = -tw / 2;
+    this.toastBg.accent = Phaser.Display.Color.HexStringToColor(color).color;
+    this.toastBg.setSize(tw, 66);
     this.tweens.killTweensOf(this.toast);
     this.toast.y = 620;
     this.tweens.add({ targets: this.toast, y: 496, duration: 350, ease: 'Back.out', hold: 2600, yoyo: true });
   }
 
-  makeRain() {
-    this.add.particles(0, -20, 'drop', {
-      x: { min: -100, max: 1060 }, lifespan: 900, speedY: { min: 700, max: 900 }, speedX: -120,
-      alpha: { start: 0.35, end: 0.1 }, quantity: 3, frequency: 16,
-    }).setScrollFactor(0).setDepth(800);
+  // Погода по умолчанию: пыль в тёмных помещениях, туман у воды и на промзоне ночью
+  defaultWeather() {
+    const env = this.lightEnv;
+    if (!env) return null;
+    if (['night_port', 'promzona', 'rechnaya'].includes(this.locKey) && env.dark > 0.5) return 'fog';
+    if (!env.outdoor && env.dark > 0.3) return 'dust';
+    return null;
   }
 
   makeTouchControls() {
