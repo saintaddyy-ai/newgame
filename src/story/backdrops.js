@@ -17,29 +17,44 @@ function bands(g, x, y, w, h, colors) {
 }
 
 // Ночной город с панельками — для титульника и двора
-export function drawSkyline(scene, width, { seed = 1, groundY = 540 } = {}) {
+// time: 'night' (по умолчанию), 'day' (пасмурный день), 'dusk' (закат)
+export function drawSkyline(scene, width, { seed = 1, groundY = 540, time = 'night' } = {}) {
   const r = rng(seed);
   const g = scene.add.graphics();
-  bands(g, 0, 0, width, groundY, [0x07060d, 0x0d0b1e, 0x15102a, 0x1e1535, 0x2a1b3d, 0x3a1f45]);
-  for (let i = 0; i < width / 12; i++) g.fillStyle(0xffffff, 0.3 + r() * 0.5).fillRect(r() * width, r() * 200, 2, 2);
-  g.fillStyle(0xf2e8c8, 1).fillCircle(width * 0.8, 90, 26);
-  g.fillStyle(0x15102a, 1).fillCircle(width * 0.8 + 12, 82, 22);
+  const P = {
+    night: { sky: [0x07060d, 0x0d0b1e, 0x15102a, 0x1e1535, 0x2a1b3d, 0x3a1f45], far: 0x1a1430, near: 0x221c38, top: 0x2c2448, off: 0x14102a, lit: 0.78, blue: 0.72 },
+    dusk: { sky: [0x2a1f4a, 0x4a2a5a, 0x7a3a6a, 0xa04a6a, 0xd0605a, 0xe8805a], far: 0x3a2a4a, near: 0x2e2440, top: 0x3a2e50, off: 0x241a36, lit: 0.82, blue: 0.8 },
+    day: { sky: [0x5a6a8a, 0x6a7a98, 0x7a88a4, 0x8a96b0, 0x9aa4bc, 0xa8b0c4], far: 0x5a6280, near: 0x4a4e68, top: 0x565a76, off: 0x6a7490, lit: 0.97, blue: 0.9 },
+  }[time];
+  bands(g, 0, 0, width, groundY, P.sky);
+  if (time === 'night') {
+    for (let i = 0; i < width / 12; i++) g.fillStyle(0xffffff, 0.3 + r() * 0.5).fillRect(r() * width, r() * 200, 2, 2);
+    g.fillStyle(0xf2e8c8, 1).fillCircle(width * 0.8, 90, 26);
+    g.fillStyle(0x15102a, 1).fillCircle(width * 0.8 + 12, 82, 22);
+  } else if (time === 'dusk') {
+    g.fillStyle(0xffd88a, 0.9).fillCircle(width * 0.7, groundY - 200, 34);
+  } else {
+    // Пасмурно: размытые облака
+    for (let i = 0; i < width / 200; i++) g.fillStyle(0xc8ccd8, 0.25).fillEllipse(r() * width, 40 + r() * 120, 180 + r() * 160, 30 + r() * 20);
+    r();
+    r();
+  }
 
   for (let x = 0; x < width; x += 60 + r() * 50) {
     const h = 140 + r() * 180;
     const w = 40 + r() * 40;
-    g.fillStyle(0x1a1430, 1).fillRect(x, groundY - 130 - h, w, h + 130);
-    if (r() > 0.6) g.fillStyle(r() > 0.5 ? 0xff3d8a : 0x3df0ff, 0.8).fillRect(x + 6, groundY - 120 - h, w - 12, 3);
+    g.fillStyle(P.far, 1).fillRect(x, groundY - 130 - h, w, h + 130);
+    if (r() > 0.6) g.fillStyle(r() > 0.5 ? 0xff3d8a : 0x3df0ff, time === 'day' ? 0.3 : 0.8).fillRect(x + 6, groundY - 120 - h, w - 12, 3);
   }
   for (let x = -20; x < width; x += 170 + r() * 40) {
     const h = 200 + r() * 90;
     const w = 150;
-    g.fillStyle(0x221c38, 1).fillRect(x, groundY - h, w, h);
-    g.fillStyle(0x2c2448, 1).fillRect(x, groundY - h, w, 6);
+    g.fillStyle(P.near, 1).fillRect(x, groundY - h, w, h);
+    g.fillStyle(P.top, 1).fillRect(x, groundY - h, w, 6);
     for (let wy = groundY - h + 18; wy < groundY - 20; wy += 22) {
       for (let wx = x + 12; wx < x + w - 14; wx += 20) {
         const lit = r();
-        g.fillStyle(lit > 0.78 ? 0xffd27a : lit > 0.72 ? 0x7a9cff : 0x14102a, 1).fillRect(wx, wy, 10, 12);
+        g.fillStyle(lit > P.lit ? 0xffd27a : lit > P.blue ? 0x7a9cff : P.off, 1).fillRect(wx, wy, 10, 12);
       }
     }
   }
@@ -151,7 +166,14 @@ export function drawApartment(scene, width) {
 }
 
 export function drawYard(scene, width, opts = {}) {
-  drawSkyline(scene, width, { seed: 42, groundY: FLOOR - 10 });
+  // Небо и дальние дома едут медленнее двора — параллакс
+  drawSkyline(scene, width, { seed: 42, groundY: FLOOR - 10, time: opts.time || 'night' }).setScrollFactor(0.5, 1);
+  // Несколько окон вдалеке то гаснут, то загораются — город живой
+  const wr = rng(77);
+  for (let i = 0; i < 10; i++) {
+    const w = scene.add.rectangle(200 + wr() * (width * 0.5 + 600), 200 + wr() * 180, 10, 12, wr() > 0.5 ? 0xffd27a : 0x7a9cff).setScrollFactor(0.5, 1).setAlpha(0);
+    scene.time.addEvent({ delay: 1500 + wr() * 4000, loop: true, callback: () => w.setAlpha(w.alpha > 0.5 ? 0 : 1) });
+  }
   const g = scene.add.graphics();
 
   // Наш дом: фасад панельки, из которого выходим

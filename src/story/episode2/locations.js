@@ -101,7 +101,7 @@ const yard = {
   ambience: () => (day() === 'sat' && now() < at(14) ? 'rain' : 'morning'),
   steps: 'stepWet',
   night: () => isNight(),
-  draw: (s) => drawYard(s, 2700, { merc: true, openMic: day() === 'fri', barberSign: true }),
+  draw: (s) => drawYard(s, 2700, { time: isDarkNow() ? 'night' : now() >= at(17) ? 'dusk' : 'day', merc: true, openMic: day() === 'fri', barberSign: true }),
   prepare: prepCast(['cop']),
   lamps: () => [
     { x: 155, y: 238, r: 120, color: 0xfff0b0, cone: true },

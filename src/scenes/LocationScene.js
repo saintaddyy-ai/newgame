@@ -97,6 +97,22 @@ export class LocationScene extends Phaser.Scene {
     this.tweens.add({ targets: title, alpha: 1, duration: 600, hold: 1600, yoyo: true });
 
     this.dialogue = new Dialogue(this);
+    // Тот, кто говорит, чуть подпрыгивает — видно, чья реплика; на крик — сильнее
+    this.dialogue.onSpeak = (name, emo) => {
+      const def = this.npcDefs.find((n) => n.name === name && this.npcs[n.id]?.visible);
+      const spr = def ? this.npcs[def.id] : name === 'Марк' ? this.player : null;
+      if (!spr || spr.__hop) return;
+      spr.__hop = true;
+      const h = emo === 'shout' ? 14 : 6;
+      const y0 = spr.y;
+      this.tweens.add({
+        targets: spr, y: y0 - h, duration: emo === 'shout' ? 70 : 110, yoyo: true, repeat: emo === 'shout' ? 2 : 0,
+        onComplete: () => {
+          spr.y = y0;
+          spr.__hop = false;
+        },
+      });
+    };
     this.notebook = new Notebook(this);
     this.notebook.onUse = (id) => {
       const fn = useItem(id);

@@ -171,6 +171,30 @@ export class Dialogue {
     this.remark.x = this.nameBg.visible ? this.nameBg.x + this.nameBg.width + 14 : TEXT_X;
   }
 
+  // Эмоция по тексту: крик, грусть, удивление — портрет и говорящий оживают
+  emotion(text) {
+    if (/[А-ЯЁ]{4,}/.test(text) || (text.match(/!/g) || []).length >= 2) return 'shout';
+    if (/\?!|!\?/.test(text)) return 'surprise';
+    if (/^…|\.\.\.$|…$/.test(text.trim())) return 'sad';
+    return 'calm';
+  }
+
+  animatePortrait(emo) {
+    const p = this.portrait;
+    if (!p.visible) return;
+    this.scene.tweens.killTweensOf(p);
+    p.setDisplaySize(120, 120).setPosition(36, BOX_Y + 24).clearTint();
+    if (emo === 'shout') {
+      p.setTint(0xffd0c0);
+      this.scene.tweens.add({ targets: p, x: { from: 32, to: 40 }, duration: 50, yoyo: true, repeat: 4, onComplete: () => p.setX(36) });
+    } else if (emo === 'surprise') {
+      this.scene.tweens.add({ targets: p, displayWidth: 128, displayHeight: 128, x: 32, y: BOX_Y + 20, duration: 120, yoyo: true });
+    } else if (emo === 'sad') {
+      p.setTint(0xa8b0d0);
+      this.scene.tweens.add({ targets: p, y: BOX_Y + 28, duration: 400 });
+    }
+  }
+
   // Реплика персонажа
   say(name, text, color) {
     if (!this.active) this.open();
@@ -179,6 +203,9 @@ export class Dialogue {
     const { clean, remark } = splitRemarks(text);
     this.setRemark(remark);
     this.type(clean, { color: '#f2f0ff', fontStyle: 'normal' });
+    const emo = this.emotion(clean);
+    this.animatePortrait(emo);
+    if (name) this.onSpeak?.(name, emo);
     if (name) playVoice(name, clean);
     return new Promise((resolve) => (this.onAdvance = resolve));
   }

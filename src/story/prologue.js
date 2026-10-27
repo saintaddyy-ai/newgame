@@ -277,7 +277,7 @@ export const LOCATIONS = {
     rain: true,
     ambience: 'rain',
     steps: 'stepWet',
-    draw: (s) => drawYard(s, 2200),
+    draw: (s) => drawYard(s, 2200, { time: 'day' }),
     lamps: [
       { x: 155, y: 238, r: 110, color: 0xfff0b0, cone: true },
       { x: 506, y: 210, r: 120, color: 0xffe0a0, cone: true, flicker: true },

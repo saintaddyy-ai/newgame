@@ -216,6 +216,7 @@ export const LOCATIONS = {
     steps: 'stepWet',
     night: () => isNight(),
     draw: (s) => drawYard(s, 2700, {
+      time: isDay() ? 'day' : phase() === 'thu_eve' ? 'dusk' : 'night',
       merc: true,
       openMic: ['thu', 'thu_eve', 'final', 'outro'].includes(phase()),
       barberSign: ['thu', 'thu_eve', 'final', 'outro'].includes(phase()),

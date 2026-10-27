@@ -10,9 +10,11 @@ import { WarehouseScene } from './scenes/WarehouseScene.js';
 import { StageScene } from './scenes/StageScene.js';
 import { ChaseScene } from './scenes/ChaseScene.js';
 import { state } from './state.js';
+import { audioCtx } from './audio.js';
 
 // Для автотестов и отладки из консоли
 window.__state = state;
+window.__ac = audioCtx;
 
 // Ждём шрифты (но не дольше 2 секунд), иначе первый текст отрисуется системным шрифтом
 async function loadFonts() {
