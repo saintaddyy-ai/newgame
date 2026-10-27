@@ -26,9 +26,20 @@ export function paintYard(scene, width, { time = 'night', min, merc = false, ope
     p.rect(0, FACADE - 10, wa, 2, 0x8a8690);
     p.hline(0, FACADE - 8, wa, 0x5a5662);
 
-    // ---- Наш дом: панелька, подъезд 3 ----
+    // ---- Наш дом: кирпичная пятиэтажка, подъезд 3 ----
+    // Кирпич тёплого красно-коричневого цвета — дом не сливается с бежевыми панельками на заднем плане
     const hx1 = 190;
-    panels(p, 0, 0, hx1, FACADE, { c: 0x9a948a, r });
+    bricks(p, 0, 0, hx1, FACADE, { c: 0x9a5640, r });
+    // Межэтажные бетонные пояса и рустовка угла — дом читается как отдельное здание
+    for (const fy of [FACADE - m(4.1), FACADE - m(7.0)]) {
+      p.rect(0, fy, hx1, 4, 0xc8c0b4);
+      p.hline(0, fy, hx1, 0xe0d8cc);
+      p.hline(0, fy + 4, hx1, 0x5a3a30);
+    }
+    for (let y = 0; y < FACADE - m(0.9); y += 9) {
+      p.rect(hx1 - 9, y, 9, 7, 0xb8b0a4);
+      p.hline(hx1 - 9, y + 7, 9, 0x6a4a40);
+    }
     // Окна: 1-й этаж (высокий цоколь), 2-й выше края экрана частично
     const lightUp = (fx, fy) => {
       if (dark > 0.3 && r() < 0.5) {
