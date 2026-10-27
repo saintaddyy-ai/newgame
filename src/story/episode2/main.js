@@ -44,7 +44,7 @@ export function startEpisode2() {
 export const EVENTS = [
   // Аркаша ставит Марку соцсети
   { id: 'social', day: 'fri', at: at(10, 20), run: () => unlockSocial() },
-  { id: 'stas_msg', day: 'fri', at: at(12), run: () => receive('stas', 'Тень? Это Стас, звук «Подвала». Зайди в «Зерно» до 16, обсудим твой слот. Слот. Ладно, это Адам так говорит') },
+  { id: 'stas_msg', day: 'fri', at: at(12), run: () => receive('stas', 'Тень, это Стас, звук «Подвала». QuadroXZ. Зайди в «Зерно» до 16 — обсудим твой слот. Слот. Слот. Гад дем, Адам, выйди из моей головы') },
   { id: 'ray_msg', day: 'fri', at: at(16, 10), run: () => F.rayMet && receive('ray', 'братик я в шаурме. воронка горячая. заходи до подвала') },
   { id: 'dan_call', day: 'fri', at: at(19), run: (scene) => !F.e2InPodval && scene.phone.ring('dan', danCallPodval) },
   { id: 'dan_call2', day: 'fri', at: at(20, 30), run: (scene) => !F.e2InPodval && scene.phone.ring('dan', danCallLate) },
@@ -54,7 +54,7 @@ export const EVENTS = [
   { id: 'managers', day: 'sat', at: at(13), run: () => managerOffers() },
   { id: 'kira_cat', day: 'sat', at: at(12, 30), run: () => relOf('kira') >= 1 && receive('kira', 'Гамлет пропал. Мой кот. Чёрный, одно ухо порвано. Если увидишь во дворах — напиши. Пожалуйста.', { replies: [{ id: 'e2_cat_yes', text: 'Поищу' }, { id: 'e2_cat_no', text: 'Сорян, занят' }] }) },
   { id: 'mira_film', day: 'sat', at: at(11), run: () => relOf('mira') >= 1 && receive('mira', 'Привет. У меня плёнка с нашей школы, не проявленная. В «Проявке» на торговой сделают за пару часов. Заберёшь? Мне некогда, я на съёмке', { replies: [{ id: 'e2_film_yes', text: 'Заберу' }, { id: 'e2_film_no', text: 'Не успею' }] }) },
-  { id: 'stas_stream', day: 'sat', at: at(11, 30), run: () => receive('stas', 'Сегодня с 12 до 16 стрим из «Зерна». Хочешь вживую почитать? Почитать. Блин, опять Адам', { replies: [{ id: 'e2_stream_yes', text: 'Да, приду' }, { id: 'e2_stream_no', text: 'Не сегодня' }] }) },
+  { id: 'stas_stream', day: 'sat', at: at(11, 30), run: () => receive('stas', 'бро, сегодня с 12 до 16 стримлю из «Зерна». хочешь вживую почитать? три строчки, без чата. квадро в этой тсс…', { replies: [{ id: 'e2_stream_yes', text: 'Да, приду' }, { id: 'e2_stream_no', text: 'Не сегодня' }] }) },
   { id: 'arkasha_cover', day: 'sat', at: at(12), run: () => arkashaCoverOffer() },
   { id: 'granny_ticket', day: 'sun', at: at(10, 30), run: () => quest('e2_ticket', { title: 'Лишний билет на «Арену»', note: 'Баба Валя нашла у подъезда. Спроси у неё во дворе', giver: 'granny', status: 'active' }) },
   { id: 'mom_tap', day: 'sun', at: at(11), run: () => receive('mom', 'Марк, кран на кухне опять течёт. Найдёшь мастера? На торговой есть «Кран-Сервис»', { replies: [{ id: 'e2_tap_yes', text: 'Найду, мам' }, { id: 'e2_tap_no', text: 'Сам почини, я занят' }] }) },
@@ -613,7 +613,7 @@ function vibeAfterPodval() {
     feed('подвал_официальный', 'Не у всех получается с первого раза. Тень, ждём ещё.');
   }
   if (p === 'bottom') feed('anon_district', 'говорят, Тень с Реем барыжит. ну-ну');
-  if (p === 'rise') feed('QuadroXZ', 'Звук в его куске — 0 дБ лишнего. Чистый. Респект. Респект — 100%.');
+  if (p === 'rise') feed('QuadroXZ', 'в его куске ноль лишних дБ. чисто. гад дем, респект. квадро в этой тсс…');
   if (F.featRay) feed('RAY', 'Тень теперь в воронке. официально');
 }
 
