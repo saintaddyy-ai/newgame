@@ -20,6 +20,9 @@ export class WarehouseScene extends Phaser.Scene {
   }
 
   create({ shift = 1, pay = BASE_PAY, back = 'warehouse' }) {
+    // Коробки прошлой смены не должны «закончить» новую в первом же кадре
+    this.ready = false;
+    this.boxes = [];
     this.total = shift === 1 ? 24 : 20;
     this.basePay = pay;
     this.backLoc = back;

@@ -118,18 +118,22 @@ export class Notebook {
     }
     let y = 92;
     if (state.goal) {
-      this.root.add(s.add.text(ROW_X, y, `ЦЕЛЬ: ${state.goal}`, { fontFamily: FONT, fontSize: '17px', color: '#c03a5a', fontStyle: 'bold', wordWrap: { width: 590 } }));
-      y += 32;
+      // Длинная цель переносится — строчки начинаются под ней, а не поверх
+      const g = s.add.text(ROW_X, y, `ЦЕЛЬ: ${state.goal}`, { fontFamily: FONT, fontSize: '17px', color: '#c03a5a', fontStyle: 'bold', wordWrap: { width: 590 } });
+      this.root.add(g);
+      y += g.height + 10;
     }
     if (!state.lines.length) {
       this.root.add(s.add.text(ROW_X, y + 6, 'Пока пусто. Осматривайся и разговаривай —\nстрочки приходят из жизни.', {
         fontFamily: FONT, fontSize: '18px', color: '#5a5070', fontStyle: 'italic', lineSpacing: 10,
       }));
     }
-    const max = state.inventory.length ? 10 : 12;
+    // Сколько строчек влезает до карманов (или до «[Q] закрыть»)
+    const bottom = state.inventory.length ? 430 : 474;
+    const max = Math.max(1, Math.floor((bottom - (y + 6)) / 30));
     state.lines.slice(-max).forEach((l, i) => this.lineRow(l, i, y + 6 + i * 30));
     if (state.lines.length > max) {
-      this.root.add(s.add.text(812, 92, `ещё ${state.lines.length - max} выше`, { fontFamily: FONT, fontSize: '13px', color: '#7a7090' }).setOrigin(1, 0));
+      this.root.add(s.add.text(ROW_X, 70, `↑ ещё ${state.lines.length - max} строчек раньше`, { fontFamily: FONT, fontSize: '13px', color: '#7a7090', fontStyle: 'italic' }));
     }
     this.usable = [];
     if (state.inventory.length) {

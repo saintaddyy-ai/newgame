@@ -39,10 +39,14 @@ export const stinks = () => needsOn() && state.clean < CLEAN_BAD;
 // Эп.2: минуты бодрствования. Сытость −1 за 14 минут (≈ −4 в час), чистота −1 за 45 минут
 export function drainMinutes(min) {
   if (!needsOn() || min <= 0) return;
+  // Дневной сон: голод идёт медленнее и голодовкой не считается
+  const asleep = !!state.flags.nd_asleep;
   const wasZero = state.food <= 0;
-  food(-min / 14);
+  food(-min / (asleep ? 30 : 14));
   clean(-min / 45);
-  if (state.food <= 0) state.starve = (state.starve || 0) + (wasZero ? min : 0);
+  if (state.food <= 0 && !asleep) state.starve = (state.starve || 0) + (wasZero ? min : 0);
+  // Без «последнего предупреждения» умереть нельзя: даже длинный скачок времени останавливается перед чертой
+  if (!state.flags.nd_last) state.starve = Math.min(state.starve || 0, STARVE_LIMIT - 60);
 }
 
 // Эп.2: ночь сна. Просыпаешься голоднее и чуть помятым; голодовка во сне не считается
@@ -51,6 +55,8 @@ export function drainNight() {
   food(-15);
   clean(-6);
   state.starve = 0;
+  // Новый день — предупреждения покажутся заново
+  ['nd_hungry', 'nd_weak', 'nd_zero', 'nd_last', 'nd_dirty', 'nd_stinks'].forEach((k) => (state.flags[k] = false));
 }
 
 // Эп.1: смена фазы (вечер → ночь → день…)
@@ -60,6 +66,16 @@ export function drainPhase() {
   food(-14);
   clean(-8);
   if (state.food <= 0 && wasZero) state.starve = (state.starve || 0) + 1;
+  if (!state.flags.nd_last) state.starve = Math.min(state.starve || 0, STARVE_PHASES - 1);
+}
+
+// После загрузки сохранения: если Марк был на грани голодной смерти — он «еле живой», но успевает поесть
+export function reviveAfterLoad() {
+  const f = state.flags;
+  const nearDeath = f.nd_dead || (needsOn() && (state.food ?? 80) <= 0);
+  if (nearDeath) state.food = Math.max(state.food ?? 0, 30);
+  state.starve = 0;
+  ['nd_dead', 'nd_zero', 'nd_last', 'nd_weak'].forEach((k) => delete f[k]);
 }
 
 // Множитель скорости ходьбы: голодный — еле идёт

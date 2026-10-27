@@ -1,14 +1,14 @@
 // ЭПИЗОД 2 «ОТКРЫТЫЙ МИКРОФОН» (пятница → воскресенье): точка входа для движка.
 import { state } from '../../state.js';
 import { LOCATIONS } from './locations.js';
-import { clockLabel as clock, energy, at, day } from './world.js';
+import { clockLabel as clock, energy, at, day, acidActive } from './world.js';
 import { EVENTS, checkEvents, passOut, startEpisode2 } from './main.js';
 import { REPLIES as SIDE_REPLIES, callScript as sideCall } from './side.js';
 import { coolHeat } from './courier.js';
 import { mapInfo as metroMap } from './metro.js';
 import { drainMinutes, tireFactor, checkNeeds, clean } from '../../needs.js';
 
-export { LOCATIONS, startEpisode2, EVENTS };
+export { LOCATIONS, startEpisode2, EVENTS, acidActive };
 
 export const REPLIES = { ...SIDE_REPLIES };
 
@@ -29,10 +29,16 @@ export function advanceTime(scene, min) {
   scene.refreshNpcs?.();
   if (state.time.min >= at(28) && !state.flags.e2PassingOut) {
     state.flags.e2PassingOut = true;
-    scene.time.delayedCall(300, () => scene.runScript(async () => {
-      state.flags.e2PassingOut = false;
-      await passOut(scene);
-    }));
+    // Ждём, пока закончится текущая сцена: обморок не должен идти поверх другого диалога
+    const tryPassOut = () => {
+      if (!scene.scene.isActive() || scene.leaving) return (state.flags.e2PassingOut = false);
+      if (scene.busy) return scene.time.delayedCall(300, tryPassOut);
+      scene.runScript(async () => {
+        state.flags.e2PassingOut = false;
+        await passOut(scene);
+      });
+    };
+    scene.time.delayedCall(300, tryPassOut);
   }
 }
 

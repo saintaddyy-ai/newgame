@@ -6,7 +6,7 @@ import { Phone } from '../ui/Phone.js';
 import { uiContainer } from '../ui/pin.js';
 import { Panel, keyCap } from '../ui/frame.js';
 import { state, addLine, TAGS, ITEMS, giveItem, saveGame, bankTx } from '../state.js';
-import { getLocation, phaseLabel, advanceTime, useItem, sceneHooks } from '../story/index.js';
+import { getLocation, phaseLabel, advanceTime, useItem, sceneHooks, acidActive } from '../story/index.js';
 import { sfx, startAmbience, stopAmbience, currentMusic, BEAT } from '../audio.js';
 import { unreadTotal } from '../phone/model.js';
 import { repaintMark } from '../story/episode2/look.js';
@@ -74,6 +74,13 @@ export class LocationScene extends Phaser.Scene {
     this.autoLights = undefined;
     this.lightEnv = undefined;
     this.doorSpots = {};
+    // Поля, которые заводят рисовальщики конкретных локаций, — от прошлой локации ничего не остаётся
+    this.mirrorRect = null;
+    this.speakers = null;
+    this.screen = null;
+    this.bulbLight = null;
+    this.toastUntil = 0;
+    this.toastQueue = [];
     this.steamSpots = [];
     this.__actors = new Set();
     const cfg = this.cfg;
@@ -201,7 +208,13 @@ export class LocationScene extends Phaser.Scene {
       this.acidTween?.stop();
       this.acidTrail?.remove();
     });
-    if (state.flags.acidNow) this.setAcid(true);
+    // Кислотный эффект — только пока марочка действует; сверяемся с состоянием постоянно
+    if (acidActive()) this.setAcid(true);
+    this.time.addEvent({ delay: 500, loop: true, callback: () => {
+      if (this.leaving) return;
+      const want = acidActive();
+      if (want !== !!this.acidFx) this.setAcid(want);
+    } });
     // Эпизод может добавить в локацию живых людей, события по времени и т. п.
     sceneHooks(this);
     cfg.setup?.(this);

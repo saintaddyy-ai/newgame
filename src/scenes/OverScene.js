@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { state, loadGame, readSave } from '../state.js';
 import { stopMusic, sfx } from '../audio.js';
 import { Panel } from '../ui/frame.js';
+import { reviveAfterLoad } from '../needs.js';
+import { clearRingQueue } from '../ui/Phone.js';
 
 const REASONS = {
   hunger: [
@@ -18,6 +20,7 @@ export class OverScene extends Phaser.Scene {
   }
 
   create({ reason = 'hunger' } = {}) {
+    this.picked = false;
     stopMusic();
     this.cameras.main.fadeIn(1200, 7, 6, 13);
     this.add.rectangle(0, 0, 960, 540, 0x07060d).setOrigin(0);
@@ -73,9 +76,8 @@ export class OverScene extends Phaser.Scene {
   reload() {
     const where = loadGame();
     if (!where) return this.scene.start('Title');
-    state.food = Math.max(state.food ?? 0, 30);
-    state.starve = 0;
-    ['nd_dead', 'nd_zero', 'nd_last', 'nd_weak'].forEach((k) => delete state.flags[k]);
+    reviveAfterLoad();
+    clearRingQueue();
     this.cameras.main.fadeOut(500, 7, 6, 13);
     this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Location', { loc: where.loc, spawnX: where.spawnX, facing: where.facing }));
   }

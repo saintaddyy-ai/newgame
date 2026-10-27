@@ -24,6 +24,12 @@ const SY = 46;
 const SW = PW - 28;
 const SH = 418;
 const HIDDEN_Y = 560;
+// Звонки, которые ждут своей очереди, живут дольше одной локации: смена сцены их не теряет
+const RING_QUEUE = [];
+// Новая игра или загрузка — старые звонки не переносятся
+export function clearRingQueue() {
+  RING_QUEUE.length = 0;
+}
 const FONT = '"PT Mono", monospace';
 const PIXEL = '"Press Start 2P"';
 
@@ -65,6 +71,7 @@ export class Phone {
     this.root.add(this.scr);
     this.banner = uiContainer(scene, 0, 0, 1490);
     this.bannerQueue = [];
+    this.queue = RING_QUEUE;
     this.makeDrag();
     // Колёсико мыши — прокрутка списков
     const onWheel = (pointer, objs, dx, dy) => {
@@ -74,6 +81,9 @@ export class Phone {
     scene.input.on('wheel', onWheel);
     this.unsub = onPhone((ev) => this.onEvent(ev));
     scene.events.once('shutdown', () => {
+      // Ушёл из локации, пока звонят, — звонок повторится в следующей
+      if (this.ringing) RING_QUEUE.unshift(this.ringing);
+      this.ringing = null;
       scene.input.off('wheel', onWheel);
       this.unsub();
       this.stopAudio();
@@ -629,12 +639,14 @@ export class Phone {
   }
 
   // Входящий звонок от сюжета
-  ring(from, script, { onDecline } = {}) {
+  // stale() — звонок уже неактуален (например, Марк сам пришёл в «Подвал»): тогда не звоним
+  ring(from, script, { onDecline, stale } = {}) {
+    if (stale?.()) return;
     if (this.scene.busy || this.ringing) {
-      (this.queue ||= []).push({ from, script, onDecline });
+      (this.queue ||= []).push({ from, script, onDecline, stale });
       return;
     }
-    this.ringing = { from, script, onDecline };
+    this.ringing = { from, script, onDecline, stale };
     this.incoming = true;
     if (!this.open) this.show('call', from);
     else this.go('call', from);
@@ -676,7 +688,7 @@ export class Phone {
 
   // Вызывается сценой, когда она освободилась
   flushQueue() {
-    if (!this.queue?.length || this.scene.busy || this.ringing) return;
+    if (!this.queue?.length || this.scene.busy || this.ringing || this.scene.leaving) return;
     const next = this.queue.shift();
     this.ring(next.from, next.script, next);
   }
@@ -830,14 +842,16 @@ export class Phone {
   async page_player() {
     this.header('ПЛЕЕР', 0xff3d8a);
     const token = (this.playerToken = (this.playerToken || 0) + 1);
-    const demos = await listDemos();
+    // Новые демки — сверху; список листается (колёсико, ▲▼, стрелки)
+    const demos = (await listDemos()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     if (token !== this.playerToken || this.page !== 'player') return;
     this.demos = demos;
     if (!demos.length) {
       this.text(SW / 2, 140, 'Демок пока нет.\nЗапиши трек у Дэна.', { color: '#77729a', align: 'center', fontSize: '13px' }).setOrigin(0.5);
       return;
     }
-    demos.slice(0, 6).forEach((d, i) => {
+    const per = 6;
+    demos.slice(this.offset || 0, (this.offset || 0) + per).forEach((d, i) => {
       const y = 54 + i * 44;
       const playing = this.playingId === d.id;
       this.row(y, 40, () => {
@@ -846,6 +860,8 @@ export class Phone {
       }, () => this.toggleDemo(d));
     });
     this.lyric = this.text(SW / 2, SH - 70, '', { fontSize: '13px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: SW - 20 } }).setOrigin(0.5);
+    this.scrollMax = Math.max(0, demos.length - per);
+    this.scrollBar();
     this.highlight();
   }
 
@@ -893,16 +909,20 @@ export class Phone {
     this.recLabel = this.text(SW / 2, 156, rec ? 'Запись… (до 20 сек)' : 'Нажми, чтобы записать мысль', { fontSize: '12px', color: '#a9a6c8' }).setOrigin(0.5, 0);
     if (rec) this.scene.tweens.add({ targets: btn, alpha: 0.6, duration: 400, yoyo: true, repeat: -1 });
     const token = (this.memoToken = (this.memoToken || 0) + 1);
-    const memos = await dbAll('memos');
+    const memos = (await dbAll('memos')).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     if (token !== this.memoToken || this.page !== 'recorder') return;
-    memos.slice(0, 5).forEach((m, i) => {
+    const per = 5;
+    const off = this.offset || 0;
+    memos.slice(off, off + per).forEach((m, i) => {
       const y = 190 + i * 42;
       this.row(y, 38, () => {
-        this.text(14, y + 10, `▶ Запись ${memos.length - i}`, { fontSize: '13px' });
+        this.text(14, y + 10, `▶ Запись ${memos.length - off - i}`, { fontSize: '13px' });
         this.text(SW - 14, y + 10, `${m.when || ''} · ${Math.round(m.length || 0)} с`, { fontSize: '10px', color: '#a9a6c8' }).setOrigin(1, 0);
       }, () => this.playMemo(m));
     });
     if (!memos.length) this.text(SW / 2, 230, 'Записей нет', { fontSize: '12px', color: '#77729a' }).setOrigin(0.5, 0);
+    this.scrollMax = Math.max(0, memos.length - per);
+    this.scrollBar();
     this.highlight();
   }
 

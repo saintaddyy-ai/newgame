@@ -163,7 +163,8 @@ const garage = {
   lamps: [{ x: 720, y: 72, r: 150, color: 0xffe8a8, alpha: 0.4 }, { x: 730, y: 371, r: 50, color: 0x3df0ff, alpha: 0.35 }],
   doors: [{ id: 'gate', x: 69, w: 122, h: 228, metal: true, color: 0x4a505c }],
   async onEnter(ctx) {
-    if (F.e2SleptAt === 'garage' && !F[`e2Morning_${day()}`]) return M.morning(ctx);
+    // Утро в гараже — только после ночи (в пятницу ночная запись с Дэном ещё не утро)
+    if (day() !== 'fri' && F.e2SleptAt === 'garage' && !F[`e2Morning_${day()}`]) return M.morning(ctx);
     if (F.e2Night === 'dan' && !F.e2DanNightTrack && day() === 'fri') return danNightTrack(ctx);
     if (await J.afterJingle(ctx)) return;
     if (F.e2KidRecording && state.flags.lastTrack && !F.e2KidTrackDone) {
@@ -438,6 +439,8 @@ function cafeLocation(id, title, spec, extraNpcs = () => [], extraItems = []) {
     },
     async onEnter(ctx) {
       F.e2WcFrom = id;
+      // После стрима — итоги сразу, даже если Стас уже ушёл
+      if (id === 'zerno' && (await S.streamAftermath(ctx))) return;
       // Драка посетителей — раз в день, не во всех кафе
       if (id !== 'zerno' && once(`fight_${id}_${day()}`) && Math.random() < 0.45) return C.cafeFight(ctx);
     },
@@ -702,7 +705,14 @@ const metro = {
       ctx.go(st.exit[0], st.exit[1]);
     } },
     { x: 900, label: 'Схема метро — поехать', sfx: 'page', async use(ctx) {
-      if (!metroOpen()) return ctx.d.think('Последний поезд ушёл. Табло пустое.');
+      if (!metroOpen()) {
+        // Застрять на платформе нельзя: можно дождаться первого поезда (часы идут, и Марк засыпает на лавке)
+        await ctx.d.think('Последний поезд ушёл. Табло пустое.');
+        const c = await ctx.d.choose(['[Сесть на лавку и ждать первый поезд]', '[Не сейчас]']);
+        if (c === 1) return;
+        await ctx.d.think('Лавка холодная. Эскалатор стоит. Где-то капает вода — почти бит.');
+        return ctx.time(Math.max(10, at(28) - now()));
+      }
       const id = await chooseStation(ctx);
       if (!id) return;
       ctx.sfx('subway');
@@ -865,7 +875,7 @@ const ray_party = {
     scene.__crowd = Array.from({ length: 4 }, (_, i) => ({ id: `guest_${i}`, name: 'Гость', sprite: personTexture(scene, randomSpec(`party_${i}`)), x: 420 + i * 200, flip: i % 2 === 0, label: 'Поговорить', talk: C.visitorTalk, cost: 5 }));
   },
   async onEnter(ctx) {
-    if (F.e2SleptAt === 'party' && !F[`e2Morning_${day()}`]) return M.morning(ctx);
+    if (day() !== 'fri' && F.e2SleptAt === 'party' && !F[`e2Morning_${day()}`]) return M.morning(ctx);
     if (day() === 'fri' && F.e2Night === 'ray') return G.rayParty(ctx);
   },
   npcs: (scene) => [

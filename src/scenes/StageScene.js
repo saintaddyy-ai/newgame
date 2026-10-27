@@ -20,6 +20,11 @@ export class StageScene extends Phaser.Scene {
   }
 
   create(data = {}) {
+    // Phaser переиспользует объект сцены: флаги прошлого концерта сбрасываем (иначе второй выход зависает)
+    this.leaving = false;
+    this.qte = null;
+    this.paused = false;
+    this.choiceCb = null;
     this.mode = data.mode || 'podval';
     this.back = data.back || { loc: 'podval', spawnX: 800 };
     this.F = state.flags;
@@ -30,7 +35,7 @@ export class StageScene extends Phaser.Scene {
     this.events.once('shutdown', () => this.cleanup());
     this.drawStage();
     this.input.keyboard.on('keydown', (ev) => this.onKey(ev));
-    this.input.on('pointerdown', () => this.phase === 'play' && this.tap());
+    this.input.on('pointerdown', () => this.phase === 'play' && !this.choiceCb && this.tap());
     this.cameras.main.fadeIn(500, 7, 6, 13);
     this.showPick();
   }
@@ -255,14 +260,24 @@ export class StageScene extends Phaser.Scene {
     this.paused = true;
     const box = this.add2(this.add.rectangle(480, 270, 620, 150, 0x0c0a16, 0.95).setStrokeStyle(3, 0xe8c27a));
     const t1 = this.add2(this.add.text(480, 225, 'РЕЙ ИЗ ЗАЛА: «ПАЙКА-А-А!»', { fontFamily: PIXEL, fontSize: '14px', color: '#e8c27a' }).setOrigin(0.5));
-    const t2 = this.add2(this.add.text(480, 275, '1 — ответить фристайлом (4 точных в такт)\n2 — не обращать внимания', { fontFamily: FONT, fontSize: '18px', color: '#ffffff', align: 'center' }).setOrigin(0.5));
+    // Два варианта — кнопками (мышь, палец) и клавишами 1/2
+    const opts = ['1. ФРИСТАЙЛ (4 в такт)', '2. НЕ ОБРАЩАТЬ ВНИМАНИЯ'].map((label, i) => {
+      const t = this.add2(this.add.text(480, 262 + i * 40, label, {
+        fontFamily: PIXEL, fontSize: '11px', color: '#0c0a16', backgroundColor: i ? '#c9c4ee' : '#ff3d8a', padding: { x: 12, y: 8 },
+      }).setOrigin(0.5));
+      t.setInteractive({ useHandCursor: true }).on('pointerdown', (p, lx, ly, ev) => {
+        ev?.stopPropagation?.();
+        this.choiceCb?.(i);
+      });
+      return t;
+    });
     sfx('boo');
     const c = await new Promise((resolve) => {
       this.choiceCb = resolve;
       this.time.delayedCall(3500, () => this.choiceCb && resolve(1));
     });
     this.choiceCb = null;
-    [box, t1, t2].forEach((o) => o.destroy());
+    [box, t1, ...opts].forEach((o) => o.destroy());
     this.paused = false;
     if (c === 1) {
       this.setHype(this.hype - 6);
@@ -402,7 +417,13 @@ export class StageScene extends Phaser.Scene {
     const v = this.add2(this.add.text(480, 220, res[1], { fontFamily: PIXEL, fontSize: '52px', color: res[2], stroke: '#0c0a16', strokeThickness: 10 }).setOrigin(0.5).setScale(0));
     this.tweens.add({ targets: v, scale: 1, duration: 500, ease: 'Back.out' });
     this.add2(this.add.text(480, 300, `${this.mode === 'stream' ? 'Зрители' : 'Толпа'}: ${Math.round(h)}%`, { fontFamily: FONT, fontSize: '22px', color: '#ffffff' }).setOrigin(0.5));
-    this.add2(this.add.text(480, 480, '[ Enter — дальше ]', { fontFamily: FONT, fontSize: '16px', color: '#77729a' }).setOrigin(0.5));
+    // «Дальше» — кнопка: нажимается мышью, пальцем и Enter
+    const next = this.add2(this.add.text(480, 474, 'ДАЛЬШЕ ▶', {
+      fontFamily: PIXEL, fontSize: '14px', color: '#0c0a16', backgroundColor: '#ffd166', padding: { x: 18, y: 12 },
+    }).setOrigin(0.5));
+    next.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.time.now > this.resultAt + 600 && this.finish());
+    this.add2(this.add.text(480, 514, 'или Enter', { fontFamily: FONT, fontSize: '13px', color: '#77729a' }).setOrigin(0.5));
+    this.resultAt = this.time.now;
     sfx(res[0] === 'fail' ? 'boo' : 'cheer');
     if (res[0] !== 'fail') sfx('clap', 0.3);
   }

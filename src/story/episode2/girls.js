@@ -80,6 +80,7 @@ export async function kiraSteps(ctx) {
   await d.say('Кира', 'Всё. Мне сдавать кассу. Иди спать, призрак.');
   ctx.goal('Домой — спать');
   F.e2SleptAt = 'home';
+  F.dateWith = null; // свидание кончилось — девушка больше не ждёт там
 }
 
 async function kiraDate(ctx) {
@@ -221,6 +222,7 @@ export async function miraRooftop(ctx) {
   ctx.time(120);
   ctx.goal('Домой — спать');
   F.e2SleptAt = 'home';
+  F.dateWith = null; // свидание кончилось — девушка больше не ждёт там
 }
 
 async function miraDate(ctx) {

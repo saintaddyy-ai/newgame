@@ -110,6 +110,9 @@ export class Dialogue {
     this.active = false;
     this.root.setVisible(false);
     this.clearChoices();
+    // Брошенный выбор/ожидание не должны ловить нажатия после закрытия окна
+    this.onChoice = null;
+    this.onAdvance = null;
   }
 
   setSpeaker(name, color, emo = 'neutral') {

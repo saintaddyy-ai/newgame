@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import { voiced } from '../../voice.js';
 import { BEAT, playMusic, stopMusic } from '../../audio.js';
 import { addContact } from '../../phone/model.js';
-import { F, state, hasItem, takeItem, pulse, now, at, day, addFollowers, faceFollowers, feed, quest, rel, relOf, once, post, clean, remark } from './common.js';
+import { F, state, hasItem, takeItem, pulse, now, at, day, addFollowers, faceFollowers, feed, quest, questStatus, rel, relOf, once, post, clean, remark } from './common.js';
 import { addActor } from '../../gfx/actors.js';
 
 const FLOOR = 470;
@@ -64,7 +64,8 @@ export async function giveFlyer(ctx, idx) {
         ctx.cash(2000, '«толстый» флаер');
         pulse(-5);
         state.stats.addiction += 1;
-        if (F.e2MiraHere) F.e2MiraSawFlyer = true;
+        // Мира у входа с плёночным фотоаппаратом — видит, что за флаер
+        if (F.e2MiraHere || ctx.scene.npcs?.mira?.visible) F.e2MiraSawFlyer = true;
         await d.think('Она забирает флаер, не глядя. Сует мне в карман купюры. Всё быстро, как в плохом сне.');
       } else {
         await d.think('У меня только обычные флаеры. Рей дал «половину воронки». Она закатывает глаза.');
@@ -424,6 +425,8 @@ async function afterMark(ctx) {
   sfx('clap');
 
   // После шоу
+  // Очередь разошлась — флаеры Рея так и остались в кармане
+  if (questStatus('e2_flyers') === 'active') quest('e2_flyers', { status: 'failed', title: 'Сто лидов: очередь разошлась' });
   F.e2PodvalDone = true;
   await d.say('Адам', 'Ты слышал себя. Это редкость. Мы — «САМИЗДАТ». Мы независимые. Независимые.');
   await d.think('Адам кладёт мне в ладонь жетон метро. На нём маркером: «РЕЧНАЯ».');

@@ -15,6 +15,9 @@ export function startEpisode2() {
   state.episode = 'ep2';
   state.time.day = 'fri';
   state.time.min = at(10);
+  // Марочка из Эпизода 1 давно отпустила — новая глава начинается трезвой
+  F.acidNow = false;
+  F.acidUntil = null;
   state.energy = 90;
   // Утром мама накормила; помыться — на совести игрока
   state.food = Math.max(state.food ?? 0, 70);
@@ -27,6 +30,8 @@ export function startEpisode2() {
   if (F.markaInInventory && !hasItem('marka')) giveItem('marka');
   if (F.reyLeadgen || F.reyLeadgenHalf) giveItem('flyers');
   if (!hasItem('mic')) giveItem('mic');
+  // Дела Эпизода 1 остаются в Эпизоде 1 (итоги главы уже показаны)
+  Object.keys(state.quests).filter((k) => k.startsWith('e1_')).forEach((k) => delete state.quests[k]);
   // Контакты из Эпизода 1 (при «Сразу Эпизод 2» их ещё нет)
   addContact('mom', { silent: true });
   addContact('dan', { silent: true });
@@ -47,11 +52,11 @@ export const EVENTS = [
   { id: 'social', day: 'fri', at: at(10, 20), run: () => unlockSocial() },
   { id: 'stas_msg', day: 'fri', at: at(12), run: () => receive('stas', 'Тень, это Стас, звук «Подвала». QuadroXZ. Зайди в «Зерно» до 16 — обсудим твой слот. Слот. Слот. Гад дем, Адам, выйди из моей головы') },
   { id: 'ray_msg', day: 'fri', at: at(16, 10), run: () => F.rayMet && receive('ray', 'братик я в шаурме. воронка горячая. заходи до подвала') },
-  { id: 'dan_call', day: 'fri', at: at(19), run: (scene) => !F.e2InPodval && scene.phone.ring('dan', danCallPodval) },
-  { id: 'dan_call2', day: 'fri', at: at(20, 30), run: (scene) => !F.e2InPodval && scene.phone.ring('dan', danCallLate) },
+  { id: 'dan_call', day: 'fri', at: at(19), run: (scene) => !F.e2InPodval && scene.phone.ring('dan', danCallPodval, { stale: () => !!F.e2InPodval || day() !== 'fri' }) },
+  { id: 'dan_call2', day: 'fri', at: at(20, 30), run: (scene) => !F.e2InPodval && scene.phone.ring('dan', danCallLate, { stale: () => !!F.e2InPodval || day() !== 'fri' }) },
   { id: 'podval_missed', day: 'fri', at: at(22), run: () => !F.e2InPodval && missPodval() },
   { id: 'vibe_sat', day: 'sat', at: at(10, 5), run: () => vibeAfterPodval() },
-  { id: 'palych', day: 'sat', at: at(10, 10), run: (scene) => !F.busted && scene.phone.ring('palych', palychCall) },
+  { id: 'palych', day: 'sat', at: at(10, 10), run: (scene) => !F.busted && scene.phone.ring('palych', palychCall, { stale: () => day() !== 'sat' || now() >= at(14) }) },
   { id: 'managers', day: 'sat', at: at(13), run: () => managerOffers() },
   { id: 'kira_cat', day: 'sat', at: at(12, 30), run: () => relOf('kira') >= 1 && receive('kira', 'Гамлет пропал. Мой кот. Чёрный, одно ухо порвано. Если увидишь во дворах — напиши. Пожалуйста.', { replies: [{ id: 'e2_cat_yes', text: 'Поищу' }, { id: 'e2_cat_no', text: 'Сорян, занят' }] }) },
   { id: 'mira_film', day: 'sat', at: at(11), run: () => relOf('mira') >= 1 && receive('mira', 'Привет. У меня плёнка с нашей школы, не проявленная. В «Проявке» на торговой сделают за пару часов. Заберёшь? Мне некогда, я на съёмке', { replies: [{ id: 'e2_film_yes', text: 'Заберу' }, { id: 'e2_film_no', text: 'Не успею' }] }) },
@@ -61,6 +66,9 @@ export const EVENTS = [
   { id: 'mom_tap', day: 'sun', at: at(11), run: () => receive('mom', 'Марк, кран на кухне опять течёт. Найдёшь мастера? На торговой есть «Кран-Сервис»', { replies: [{ id: 'e2_tap_yes', text: 'Найду, мам' }, { id: 'e2_tap_no', text: 'Сам почини, я занят' }] }) },
   { id: 'kid_track', day: 'sun', at: at(12), run: () => quest('e2_kidtrack', { title: 'Трек про двор для пацана', note: 'Пацан ждёт во дворе. Записать у Дэна (строчки про улицу)', giver: 'kid', status: 'active' }) },
   { id: 'jingle_late', day: 'sun', at: at(20), run: () => jingleDeadline() },
+  // Дела со сроком: не успел — провал (а не «активно» навсегда)
+  { id: 'palych_late', day: 'sat', at: at(14), run: () => questStatus('e2_palych') === 'active' && !F.e2PalychDone && quest('e2_palych', { status: 'failed', title: 'Подработка у Палыча: опоздал' }) },
+  { id: 'stream_late', day: 'sat', at: at(16), run: () => questStatus('e2_stream') === 'active' && !F.e2StreamDone && quest('e2_stream', { status: 'failed', title: 'Стрим у Стаса: не пришёл' }) },
   { id: 'clip', day: 'sun', at: at(20), run: (scene) => clipRelease(scene) },
 ];
 
@@ -184,7 +192,9 @@ export async function sleepHere(ctx, place = 'home') {
     energy(35);
     d.close();
     await ctx.lieDown();
+    F.nd_asleep = true;
     ctx.time(120);
+    F.nd_asleep = false;
     ctx.standUp();
     ctx.scene.cameras.main.flash(500, 7, 6, 13);
     return d.think('Проваливаюсь в сон. Просыпаюсь через два часа — будто через неделю.');
@@ -216,7 +226,7 @@ export async function passOut(scene) {
   F.e2SleptAt = scene.locKey === 'garage' ? 'garage' : scene.locKey === 'apartment' ? 'home' : 'party';
   if (F.e2SleptAt === 'party' && scene.locKey !== 'ray_party') F.e2SleptAt = 'street';
   state.energy = 45;
-  if (day() === 'sun') return endSunday(ctx, F.e2SleptAt);
+  if (day() === 'sun') return endSunday(ctx, F.e2SleptAt, { forced: true });
   nextDay();
   state.time.min = at(11, 30);
   if (F.e2SleptAt !== 'home') clean(F.e2SleptAt === 'street' ? -15 : -8);
@@ -674,10 +684,13 @@ async function clipRelease(scene) {
   scene.ctx.goal('Вечер воскресенья. Лечь спать дома — закончить главу');
 }
 
-export async function endSunday(ctx, place) {
+// forced — Марк вырубился в 4 утра: «Ещё не всё» уже не предлагаем
+export async function endSunday(ctx, place, { forced = false } = {}) {
   const { d } = ctx;
-  const c = await d.choose(['Закончить выходные (итоги главы)', 'Ещё не всё']);
-  if (c === 1) return;
+  if (!forced) {
+    const c = await d.choose(['Закончить выходные (итоги главы)', 'Ещё не всё']);
+    if (c === 1) return;
+  }
   F.e2SundayAt = place;
   await d.think('Выходные кончились. Пятница, суббота, воскресенье — а будто год.');
   if (place === 'home') await d.think('За стенкой мама смотрит сериал. Тихо смеётся. Давно я этого не слышал.');

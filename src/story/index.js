@@ -22,6 +22,13 @@ export function advanceTime(scene, min) {
   if (state.episode === 'ep2') EP2.advanceTime(scene, min);
 }
 
+// Действует ли марочка прямо сейчас: экран «плывёт» только тогда (Эп.1 — по фазам, Эп.2 — по часам и до сна)
+export function acidActive() {
+  if (state.episode === 'ep2') return EP2.acidActive();
+  if (state.episode === 'ep1') return !!state.flags.acidNow;
+  return false;
+}
+
 // Использовать вещь из тетради (марочка «на потом»)
 export function useItem(id) {
   if (state.episode === 'ep2') return EP2.ITEM_USE[id] || null;

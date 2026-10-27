@@ -37,7 +37,7 @@ export function makeMirror(scene) {
   const shape = scene.make.graphics({ x: 0, y: 0 }, false);
   shape.fillStyle(0xffffff).fillRect(r.x, r.y, r.w, r.h);
   refl.setMask(shape.createGeometryMask());
-  scene.events.on('update', () => {
+  const follow = () => {
     if (!refl.active || !scene.player?.active) return;
     const p = scene.player;
     // Отражение «за стеклом»: чуть меньше и выше (дальше от зрителя), смотрит навстречу
@@ -47,7 +47,9 @@ export function makeMirror(scene) {
     refl.x = p.x;
     refl.y = p.y - 18;
     refl.setVisible(Math.abs(p.x - (r.x + r.w / 2)) < r.w);
-  });
+  };
+  scene.events.on('update', follow);
+  scene.events.once('shutdown', () => scene.events.off('update', follow));
   return refl;
 }
 

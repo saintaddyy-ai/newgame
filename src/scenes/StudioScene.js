@@ -15,6 +15,7 @@ const TITLES = {
   street: 'Панельки',
   pain: 'Мама, прости',
   dream: 'Выше крыш',
+  party: 'До утра',
   mixed: 'Подвал',
 };
 
@@ -39,6 +40,7 @@ export class StudioScene extends Phaser.Scene {
     // mode: 'prologue' — первый трек; 'rehearsal' — репетиция в финале Эпизода 1; 'track' — трек в Эпизоде 2;
     // 'jingle' — готовые строчки (data.lines), без выбора из тетради
     this.mode = data.mode || 'prologue';
+    this.testing = false; // тест микрофона мог оборваться при прошлом выходе из будки
     this.fixedLines = data.lines || null;
     this.need = this.fixedLines ? this.fixedLines.length : PICK;
     this.back = data.back || { loc: 'garage', spawnX: 780 };
@@ -318,6 +320,9 @@ export class StudioScene extends Phaser.Scene {
   async startRecording(withMic) {
     if (this.phase !== 'setup' && this.phase !== 'result') return;
     this.phase = 'starting';
+    // Хотел ли игрок записать голос (если микрофон не дался — потом спросим, что делать)
+    this.wantedVoice = withMic;
+    this.instrumental = false;
     this.clearUi();
     stopMusic(0.3);
     this.previewStop();
@@ -472,8 +477,10 @@ export class StudioScene extends Phaser.Scene {
     }
     // Подача: какую долю времени строк игрок реально звучал
     this.score = this.raw ? Math.min(100, Math.round(((this.voiced / Math.max(1, this.lineFrames)) / 0.6) * 100)) : null;
+    // Тишину определяем по «сырой» подаче — бонусы Стаса не должны выдавать её за голос
+    this.rawScore = this.score;
     // Уроки сведения от Стаса (Эп.2) и его сведение джингла — звук чище, подача чуть выше
-    if (this.score !== null) {
+    if (this.score !== null && this.score >= 8) {
       if (state.flags.e2StasSchool) this.score = Math.min(100, this.score + 5);
       if (this.mode === 'jingle' && state.flags.e2JingleStas) this.score = Math.min(100, this.score + 10);
     }
@@ -503,6 +510,10 @@ export class StudioScene extends Phaser.Scene {
     this.phase = 'result';
     this.clearUi();
     const theme = trackTheme(this.picked);
+    // Голоса нет (микрофон не дался, молчал или игрок выбрал «Без голоса») — молча не сохраняем:
+    // проверить микрофон и перезаписать или явно сохранить инструментал
+    const silent = this.rawScore === null || this.rawScore === undefined || this.rawScore < 8;
+    if (silent) return this.showNoVoice(theme);
     this.title(this.mode === 'jingle' ? 'ДЖИНГЛ ГОТОВ' : 'ДЕМКА ГОТОВА', `«${this.trackTitle || TITLES[theme]}»  ·  тема: ${theme === 'mixed' ? 'всё сразу' : TAGS[theme].name}`);
     if (this.score !== null) {
       const verdict = this.score >= 70 ? ['ОГОНЬ', '#ffd166'] : this.score >= 40 ? ['НОРМ', '#3df0ff'] : ['ТИХОВАТО', '#ff6b8a'];
@@ -522,11 +533,51 @@ export class StudioScene extends Phaser.Scene {
     this.buttonsRow(rows);
   }
 
+  showNoVoice(theme) {
+    const asked = this.wantedVoice;
+    this.title(asked ? 'ГОЛОСА НЕ СЛЫШНО' : 'БЕЗ ГОЛОСА', `«${this.trackTitle || TITLES[theme]}»  ·  тема: ${theme === 'mixed' ? 'всё сразу' : TAGS[theme].name}`);
+    const why = !asked
+      ? 'Ты записал только бит и текст.'
+      : this.raw
+        ? 'Микрофон записал тишину — голоса почти нет.'
+        : 'Микрофон недоступен: браузер не дал доступ или его нет.';
+    this.add2(this.add.text(480, 200, why, { fontFamily: FONT, fontSize: '22px', color: '#ff9ab0', align: 'center', wordWrap: { width: 820 } }).setOrigin(0.5));
+    this.add2(this.add.text(480, 262, asked
+      ? 'Проверь микрофон (разреши доступ в браузере, выбери нужный вход) и перезапиши.\nИли сохрани честно — как инструментал: бит и текст, без голоса.'
+      : 'Можно перезаписать с голосом или сохранить как инструментал.', {
+      fontFamily: FONT, fontSize: '17px', color: '#c9c4ee', align: 'center', lineSpacing: 6,
+    }).setOrigin(0.5));
+    sfx('deny');
+    this.buttonsRow([
+      { label: 'ТЕСТ МИКРО', color: '#3df0ff', onClick: () => this.retryWithTest() },
+      { label: '↻ С ГОЛОСОМ', color: '#ff3d3d', onClick: () => this.startRecording(true) },
+      { label: '▶ ПОСЛУШАТЬ', color: '#9ab0ff', onClick: () => this.preview() },
+      { label: '✓ ИНСТРУМЕНТАЛ', color: '#ffd166', onClick: () => this.saveInstrumental() },
+    ]);
+  }
+
+  // Назад к подготовке — там «Тест микро» и запись заново
+  retryWithTest() {
+    this.previewStop();
+    this.phase = 'setup';
+    this.showSetup(true);
+    this.time.delayedCall(300, () => this.micTest());
+  }
+
+  // Явно: сохранить без голоса, с пометкой «инструментал»
+  saveInstrumental() {
+    this.instrumental = true;
+    this.blob = null;
+    this.rawBlob = null;
+    this.score = null;
+    this.save();
+  }
+
   demoData(before = false) {
     const theme = trackTheme(this.picked);
     const base = this.trackTitle || TITLES[theme];
     return {
-      title: this.mode === 'rehearsal' ? `${base} (репетиция)` : base,
+      title: `${this.mode === 'rehearsal' ? `${base} (репетиция)` : base}${this.instrumental ? ' (инструментал)' : ''}`,
       theme,
       lines: this.picked.map((l) => ({ ...l })),
       items: this.tl.items,

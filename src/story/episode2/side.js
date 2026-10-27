@@ -66,6 +66,19 @@ const TIPS = voiced('Стас', {
 });
 const TIP_ORDER = ['low', 'mud', 'presence', 'comp', 'ess', 'gate', 'tune', 'double', 'delay'];
 
+// Итоги стрима: подписчики, слава, «Дела». Стас рядом — говорит; ушёл — пишет
+export async function streamAftermath(ctx) {
+  if (!F.e2StreamResult || !once('stream_after')) return false;
+  const r = F.e2StreamResult;
+  faceFollowers('ritm', r === 'fire' ? 220 : r === 'ok' ? 90 : 20, 'стрим из «Зерна»');
+  state.stats.fame += r === 'fail' ? 0 : 1;
+  quest('e2_stream', { status: 'done', title: 'Стрим у Стаса' });
+  const text = r === 'fire' ? STAS.streamFire : r === 'ok' ? STAS.streamOk : STAS.streamFail;
+  if (ctx.scene.npcs?.stas?.visible) await ctx.d.say('Стас', text);
+  else receive('stas', text);
+  return true;
+}
+
 export async function stasCafe(ctx) {
   const { d, start, line } = ctx;
   if (F.e2StreamOk && !F.e2StreamDone && day() === 'sat' && now() >= at(12) && now() < at(16)) {
@@ -77,13 +90,7 @@ export async function stasCafe(ctx) {
     d.close();
     return start('Stage', { mode: 'stream', back: { loc: 'cafe_zerno', spawnX: 600 } });
   }
-  if (F.e2StreamResult && once('stream_after')) {
-    const r = F.e2StreamResult;
-    faceFollowers('ritm', r === 'fire' ? 220 : r === 'ok' ? 90 : 20, 'стрим из «Зерна»');
-    state.stats.fame += r === 'fail' ? 0 : 1;
-    quest('e2_stream', { status: 'done', title: 'Стрим у Стаса' });
-    return d.say('Стас', r === 'fire' ? STAS.streamFire : r === 'ok' ? STAS.streamOk : STAS.streamFail);
-  }
+  if (await streamAftermath(ctx)) return;
   if (!F.e2StasMet) {
     F.e2StasMet = true;
     await d.think('У окна — парень в авиаторах и с цепью. Ноутбук, наушники, американо. Пальцы двигают невидимые фейдеры.');

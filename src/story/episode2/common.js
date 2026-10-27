@@ -65,7 +65,8 @@ export function canPay(n) {
 }
 
 // Последний трек/демка — для заданий «отнести демку»
-export const hasDemo = () => state.tracks.length > 0;
+// Живые выступления («(live)») — не демка: Адаму нужна запись из студии
+export const hasDemo = () => state.tracks.some((t) => !/\(live\)/.test(t.title || ''));
 
 export function markLook(delta) {
   state.stats.look = (state.stats.look || 0) + delta;

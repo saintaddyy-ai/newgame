@@ -7,6 +7,8 @@ import { Panel } from '../ui/frame.js';
 import { applyLook } from '../gfx/fx.js';
 import { startEpisode1 } from '../story/episode1.js';
 import { startEpisode2 } from '../story/episode2/main.js';
+import { reviveAfterLoad } from '../needs.js';
+import { clearRingQueue } from '../ui/Phone.js';
 
 // Выборы пролога «по умолчанию» — для старта сразу с Эпизода 1
 function prologueDefaults() {
@@ -52,6 +54,8 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create() {
+    this.leaving = false; // сцена переиспользуется: после итогов или «Конца» меню снова должно работать
+    clearRingQueue();
     paintTitle(this);
     // Марк сидит на краю крыши и смотрит на город
     const mark = addActor(this, 180, 506, 'mark', { depth: 2 });
@@ -146,6 +150,7 @@ export class TitleScene extends Phaser.Scene {
   continueGame() {
     const where = loadGame();
     if (!where) return this.newGame();
+    reviveAfterLoad();
     if (where.done === 'prologue') {
       const w = startEpisode1();
       saveGame(w);
