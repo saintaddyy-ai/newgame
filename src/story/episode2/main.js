@@ -7,6 +7,7 @@ import {
 } from './common.js';
 import { mood, byMood, nextDay, isNight, studioOccupant, whereIs, initialPulse, pulseLevel } from './world.js';
 import { rayMenu } from './courier.js';
+import { danJingleOption, recordJingle, jingleDeadline } from './jingle.js';
 
 // ---------- Старт эпизода ----------
 
@@ -59,6 +60,7 @@ export const EVENTS = [
   { id: 'granny_ticket', day: 'sun', at: at(10, 30), run: () => quest('e2_ticket', { title: 'Лишний билет на «Арену»', note: 'Баба Валя нашла у подъезда. Спроси у неё во дворе', giver: 'granny', status: 'active' }) },
   { id: 'mom_tap', day: 'sun', at: at(11), run: () => receive('mom', 'Марк, кран на кухне опять течёт. Найдёшь мастера? На торговой есть «Кран-Сервис»', { replies: [{ id: 'e2_tap_yes', text: 'Найду, мам' }, { id: 'e2_tap_no', text: 'Сам почини, я занят' }] }) },
   { id: 'kid_track', day: 'sun', at: at(12), run: () => quest('e2_kidtrack', { title: 'Трек про двор для пацана', note: 'Пацан ждёт во дворе. Записать у Дэна (строчки про улицу)', giver: 'kid', status: 'active' }) },
+  { id: 'jingle_late', day: 'sun', at: at(20), run: () => jingleDeadline() },
   { id: 'clip', day: 'sun', at: at(20), run: (scene) => clipRelease(scene) },
 ];
 
@@ -304,6 +306,8 @@ export async function danTalk2(ctx) {
   if (!occ) opts.push(['record', 'Записать трек (1 час)']);
   if (!F.manager && F.e2ManagerOffers) opts.push(['manager', '«Будешь моим менеджером?»']);
   if (questStatus('e2_kidtrack') === 'active') opts.push(['kid', '«Пацану обещал трек про двор.»']);
+  const jingle = danJingleOption();
+  if (jingle) opts.push(jingle);
   if (isNight() && once(`dan_talk_${day()}`)) opts.push(['night', '«Не спится?»']);
   opts.push(['bye', '«Потом.»']);
   const c = await d.choose(opts.map((o) => o[1]));
@@ -315,6 +319,7 @@ export async function danTalk2(ctx) {
     d.close();
     return start('Studio', { mode: 'track', title: pick === 'kid' ? 'Наш двор' : null, back: { loc: 'garage', spawnX: 780 } });
   }
+  if (pick === 'jingle') return recordJingle(ctx);
   if (pick === 'manager') return managerDan(ctx);
   if (pick === 'night') {
     await d.say('Дэн', 'Как думаешь, если нас никто не услышит — это считается, что мы были?');
@@ -564,10 +569,10 @@ export async function kidTalk2(ctx) {
 
 export async function rayTalk2(ctx, where) {
   const { d } = ctx;
-  if (F.busted) return d.say('Рей', 'Братик? Какой братик? Я тебя не знаю. Мы не знакомы. Рей в этой малашечке — один.');
+  if (F.busted) return d.say('Рей', 'Братик? Какой братик? Я тебя не знаю. Мы не знакомы. Рей в этой малышечке — один.');
   if (F.quitRay && !F.e2RayForgave) return d.say('Рей', 'А, бывший лид. Проходи, проходи. Не задерживайся в моей воронке.');
   const m = mood('ray');
-  await d.say('Рей', m >= 1 ? 'БРАТИК! Иди сюда! Проверка на звонкость!' : m <= -1 ? 'А… это ты. Пайка. Рей сегодня отходит. Не дыши громко.' : 'О, Тень. Рей в этой малашечке. Как воронка?');
+  await d.say('Рей', m >= 1 ? 'БРАТИК! Иди сюда! Проверка на звонкость!' : m <= -1 ? 'А… это ты. Пайка. Рей сегодня отходит. Не дыши громко.' : 'О, Тень. Рей в этой малышечке. Как воронка?');
   if (m >= 1) {
     ctx.sfx('thump');
     ctx.fx.shake(150, 0.008);

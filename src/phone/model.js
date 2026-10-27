@@ -6,7 +6,7 @@ export const CONTACTS = {
   mom: { name: 'Мама', color: '#ffb38a', letter: 'М' },
   dan: { name: 'Дэн', color: '#ff6b6b', letter: 'Д' },
   lyuba: { name: 'Тётя Люба', color: '#ffb38a', letter: 'Л' },
-  ray: { name: 'РЕЙ В ЭТОЙ МАЛАШЕЧКЕ', color: '#e8c27a', letter: 'Р' },
+  ray: { name: 'РЕЙ В ЭТОЙ МАЛЫШЕЧКЕ', color: '#e8c27a', letter: 'Р' },
   arkasha: { name: 'jeffrY#creator', color: '#f0f0f0', letter: 'J' },
   stas: { name: 'QuadroXZ (Стас)', color: '#c0c8d8', letter: 'Q' },
   adam: { name: 'twinspeak', color: '#b8b8c0', letter: 'T' },

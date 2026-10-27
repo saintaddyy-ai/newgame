@@ -15,6 +15,7 @@ import * as G from './girls.js';
 import * as C from './city.js';
 import * as S from './side.js';
 import * as R from './courier.js';
+import * as J from './jingle.js';
 import { STATIONS, station, chooseStation, metroOpen } from './metro.js';
 
 const FLOOR = 470;
@@ -164,6 +165,7 @@ const garage = {
   async onEnter(ctx) {
     if (F.e2SleptAt === 'garage' && !F[`e2Morning_${day()}`]) return M.morning(ctx);
     if (F.e2Night === 'dan' && !F.e2DanNightTrack && day() === 'fri') return danNightTrack(ctx);
+    if (await J.afterJingle(ctx)) return;
     if (F.e2KidRecording && state.flags.lastTrack && !F.e2KidTrackDone) {
       F.e2KidTrackDone = true;
       return ctx.d.say('Дэн', 'Трек про двор готов. Беги к пацану, пусть снимает.');
@@ -529,8 +531,13 @@ async function timurTalk(ctx) {
     return d.say('Рей', 'Тимур, братик, лаваш — это верх воронки, мясо — середина, соус — конверсия! Это же очевидно!');
   }
   await d.say('Тимур', pickOne(['Шаурма — это как жизнь. Главное — соус.', 'Кира хорошая. Странная, но хорошая. Котов кормит.', 'Ночью тут все честные. Днём — все спешат.']));
-  const c = await d.choose(['Шаурму — 250 ₽', 'Шаурму XL с двойным мясом — 380 ₽', '«Просто зашёл.»']);
-  if (c === 2) return;
+  // Задание 13: джингл (предложить / сдать)
+  const jingle = J.timurJingleOption();
+  const opts = [...(jingle ? [jingle] : []), ['eat', 'Шаурму — 250 ₽'], ['xl', 'Шаурму XL с двойным мясом — 380 ₽'], ['bye', '«Просто зашёл.»']];
+  const pick = opts[await d.choose(opts.map((o) => o[1]))][0];
+  if (pick === 'bye') return;
+  if (jingle && pick === jingle[0]) return J.timurJingle(ctx, pick);
+  const c = pick === 'eat' ? 0 : 1;
   const price = c === 0 ? 250 : 380;
   if (state.cash < price) return d.say('Тимур', 'Не хватает, брат. В долг не кручу. Даже тебе.');
   ctx.cash(-price, c === 0 ? 'шаурма' : 'шаурма XL');

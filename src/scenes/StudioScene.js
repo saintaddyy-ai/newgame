@@ -36,8 +36,11 @@ export class StudioScene extends Phaser.Scene {
   }
 
   create(data = {}) {
-    // mode: 'prologue' — первый трек; 'rehearsal' — репетиция в финале Эпизода 1; 'track' — трек в Эпизоде 2
+    // mode: 'prologue' — первый трек; 'rehearsal' — репетиция в финале Эпизода 1; 'track' — трек в Эпизоде 2;
+    // 'jingle' — готовые строчки (data.lines), без выбора из тетради
     this.mode = data.mode || 'prologue';
+    this.fixedLines = data.lines || null;
+    this.need = this.fixedLines ? this.fixedLines.length : PICK;
     this.back = data.back || { loc: 'garage', spawnX: 780 };
     this.trackTitle = data.title || null;
     this.autotune = state.settings.autotune || 'off';
@@ -58,7 +61,10 @@ export class StudioScene extends Phaser.Scene {
     playMusic(BEAT.url, { offset: BEAT.drop, loop: true, loopStart: BEAT.drop, volume: 0.6, muffled: true });
     this.input.keyboard.on('keydown', (ev) => this.onKey(ev));
     this.events.once('shutdown', () => this.cleanup());
-    this.showPick();
+    if (this.fixedLines) {
+      this.picked = this.fixedLines.map((l) => ({ ...l }));
+      this.showSetup(true);
+    } else this.showPick();
   }
 
   drawBooth() {
@@ -82,13 +88,20 @@ export class StudioScene extends Phaser.Scene {
   }
 
   add2(o) {
+    // Интерфейс — поверх будки (стойка микрофона, Марк, эквалайзер)
+    o.setDepth?.(50);
     this.ui.push(o);
     return o;
   }
 
   title(text, sub) {
     this.add2(this.add.text(480, 40, text, { fontFamily: PIXEL, fontSize: '24px', color: '#ffffff', stroke: '#ff3d8a', strokeThickness: 6 }).setOrigin(0.5));
-    if (sub) this.hint = this.add2(this.add.text(480, 84, sub, { fontFamily: FONT, fontSize: '20px', color: '#c9c4ee', align: 'center' }).setOrigin(0.5));
+    if (sub) {
+      this.hint = this.add2(this.add.text(480, 84, sub, { fontFamily: FONT, fontSize: '20px', color: '#c9c4ee', align: 'center' }).setOrigin(0.5));
+      // Подложка, чтобы неон будки не лез в текст
+      const bg = this.add2(this.add.rectangle(480, 84, this.hint.width + 28, this.hint.height + 10, 0x0c0a16, 0.72));
+      bg.setDepth(49);
+    }
   }
 
   // Кнопки внизу экрана. items: [{ label, color, onClick }]
@@ -158,7 +171,7 @@ export class StudioScene extends Phaser.Scene {
     // На экран влезает 12 карточек — берём последние собранные
     this.pool = state.lines.slice(-12);
     this.cards = this.pool.map((l, i) => this.makeCard(l, i));
-    this.recBtn = this.add2(this.add.text(480, 500, '● К МИКРОФОНУ', {
+    this.recBtn = this.add2(this.add.text(480, 500, 'К МИКРОФОНУ ▶', {
       fontFamily: PIXEL, fontSize: '16px', color: '#0c0a16', backgroundColor: '#ff3d3d', padding: { x: 18, y: 12 },
     }).setOrigin(0.5).setAlpha(0.3));
     this.recBtn.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.showSetup());
@@ -201,13 +214,14 @@ export class StudioScene extends Phaser.Scene {
   // ---------- 2. Подготовка: микрофон ----------
 
   showSetup(refresh = false) {
-    if (!refresh && (this.phase !== 'pick' || this.picked.length < PICK)) return;
+    if (!refresh && (this.phase !== 'pick' || this.picked.length < this.need)) return;
     if (!refresh) sfx('select');
     this.phase = 'setup';
     this.clearUi();
-    this.title('К МИКРОФОНУ', 'Сейчас ты зачитаешь эти строчки под бит Дэна — по-настоящему, своим голосом.\nСтрочки будут подсвечиваться, как в караоке.');
+    this.title(this.mode === 'jingle' ? 'ДЖИНГЛ «ШАУРМА 24»' : 'К МИКРОФОНУ', 'Сейчас ты зачитаешь эти строчки под бит Дэна — по-настоящему, своим голосом.\nСтрочки будут подсвечиваться, как в караоке.');
+    const step = this.picked.length > 3 ? 34 : 44;
     this.picked.forEach((l, i) => {
-      this.add2(this.add.text(480, 170 + i * 44, `«${l.text}»`, { fontFamily: FONT, fontSize: '21px', color: TAGS[l.tag].color, fontStyle: 'italic' }).setOrigin(0.5));
+      this.add2(this.add.text(480, 166 + i * step, `«${l.text}»`, { fontFamily: FONT, fontSize: this.picked.length > 3 ? '18px' : '21px', color: TAGS[l.tag].color, fontStyle: 'italic' }).setOrigin(0.5));
     });
     this.add2(this.add.text(480, 316, 'Сначала отсчёт — 2 такта. Каждая строчка звучит 2 такта, весь куплет — два круга.', {
       fontFamily: FONT, fontSize: '15px', color: '#77729a',
@@ -218,7 +232,7 @@ export class StudioScene extends Phaser.Scene {
     }).setOrigin(0.5));
     this.testMeter = null;
     this.buttonsRow([
-      { label: '● ЗАПИСЬ', color: '#ff3d3d', onClick: () => this.startRecording(true) },
+      { label: 'ЗАПИСЬ', color: '#ff3d3d', onClick: () => this.startRecording(true) },
       { label: 'БЕЗ ГОЛОСА', color: '#c9c4ee', onClick: () => this.startRecording(false) },
       { label: 'ТЕСТ МИКРО', color: '#3df0ff', onClick: () => this.micTest() },
       { label: 'НАЗАД', color: '#77729a', onClick: () => this.backToPick() },
@@ -260,8 +274,16 @@ export class StudioScene extends Phaser.Scene {
 
   backToPick() {
     sfx('click');
+    // Готовые строчки (джингл) — «Назад» выходит из студии, задание остаётся
+    if (this.fixedLines) return this.leave();
     this.picked = [];
     this.showPick();
+  }
+
+  leave() {
+    this.phase = 'saving';
+    this.cameras.main.fadeOut(400, 7, 6, 13);
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Location', this.back));
   }
 
   async getMic() {
@@ -450,6 +472,11 @@ export class StudioScene extends Phaser.Scene {
     }
     // Подача: какую долю времени строк игрок реально звучал
     this.score = this.raw ? Math.min(100, Math.round(((this.voiced / Math.max(1, this.lineFrames)) / 0.6) * 100)) : null;
+    // Уроки сведения от Стаса (Эп.2) и его сведение джингла — звук чище, подача чуть выше
+    if (this.score !== null) {
+      if (state.flags.e2StasSchool) this.score = Math.min(100, this.score + 5);
+      if (this.mode === 'jingle' && state.flags.e2JingleStas) this.score = Math.min(100, this.score + 10);
+    }
     this.showResult();
   }
 
@@ -476,7 +503,7 @@ export class StudioScene extends Phaser.Scene {
     this.phase = 'result';
     this.clearUi();
     const theme = trackTheme(this.picked);
-    this.title('ДЕМКА ГОТОВА', `«${TITLES[theme]}»  ·  тема: ${theme === 'mixed' ? 'всё сразу' : TAGS[theme].name}`);
+    this.title(this.mode === 'jingle' ? 'ДЖИНГЛ ГОТОВ' : 'ДЕМКА ГОТОВА', `«${this.trackTitle || TITLES[theme]}»  ·  тема: ${theme === 'mixed' ? 'всё сразу' : TAGS[theme].name}`);
     if (this.score !== null) {
       const verdict = this.score >= 70 ? ['ОГОНЬ', '#ffd166'] : this.score >= 40 ? ['НОРМ', '#3df0ff'] : ['ТИХОВАТО', '#ff6b8a'];
       this.add2(this.add.text(480, 200, `ПОДАЧА: ${this.score}%`, { fontFamily: PIXEL, fontSize: '28px', color: '#ffffff' }).setOrigin(0.5));
@@ -536,6 +563,7 @@ export class StudioScene extends Phaser.Scene {
     await saveDemo(demo);
     state.tracks.push({ title: demo.title, theme: demo.theme, lines: demo.lines, voice: !!demo.voice, score: demo.score });
     if (this.mode === 'rehearsal') state.flags.e1Rehearsal = true;
+    else if (this.mode === 'jingle') state.flags.e2JingleRec = { score: demo.score, voice: !!demo.voice };
     else if (this.mode === 'track') state.flags.lastTrack = { title: demo.title, theme: demo.theme, score: demo.score };
     else state.flags.trackDone = true;
     if (demo.theme === 'pain') state.stats.honesty += 1;
