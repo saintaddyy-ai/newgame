@@ -5,19 +5,6 @@ import { CAST_SPECS } from './gfx/cast.js';
 import { portraitKey } from './gfx/portraits.js';
 import { boxTextures } from './gfx/places/scenes.js';
 
-function paint(scene, key, rows, palette, scale) {
-  const tex = scene.textures.createCanvas(key, rows[0].length * scale, rows.length * scale);
-  const ctx = tex.getContext();
-  rows.forEach((row, y) => {
-    [...row].forEach((ch, x) => {
-      if (ch === '.' || !palette[ch]) return;
-      ctx.fillStyle = palette[ch];
-      ctx.fillRect(x * scale, y * scale, scale, scale);
-    });
-  });
-  tex.refresh();
-}
-
 export function createArt(scene) {
   // Именные персонажи: Марку — все анимации, остальным — основные
   for (const name of Object.keys(CAST_SPECS)) ensureActor(scene, name, null, name === 'mark' ? 'full' : 'npc');
@@ -53,15 +40,7 @@ export function createArt(scene) {
   gc.fillRect(0, 0, 128, 128);
   glow.refresh();
 
-  // Голубь и кот
-  paint(scene, 'pigeon_0', ['..GG...', '.GGeG..', 'GGGGGGw', '.GGGGG.', '..o.o..'], { G: '#7a7a8a', e: '#141418', w: '#c8c8d0', o: '#c86a4a' }, 4);
-  paint(scene, 'cat_0', ['K...K...', 'KK.KK...', 'KyKyK...', 'KKKKK..K', '.KKKKK.K', '.KKKKKKK', '.KKKKKK.', '.K.K.K..'], { K: '#1a1420', y: '#d8e040' }, 5);
-  paint(scene, 'cat_1', ['K...K...', 'KK.KK...', 'KyKyK..K', 'KKKKK..K', '.KKKKKK.', '.KKKKKK.', '.KKKKKK.', '.K.K.K..'], { K: '#1a1420', y: '#d8e040' }, 5);
-
-  paint(scene, 'bird_0', ['B.....B', '.B...B.', '..BBB..'], { B: '#1a1426' }, 3);
-  paint(scene, 'bird_1', ['.......', 'BBBBBBB', '...B...'], { B: '#1a1426' }, 3);
-  scene.anims.create({ key: 'bird_fly', frames: [{ key: 'bird_0' }, { key: 'bird_1' }], frameRate: 8, repeat: -1 });
-
+  // Голуби, кошки и птицы — в gfx/life.js (createLifeTextures)
   drawArenaPoster(scene);
   drawOpenMicPoster(scene);
   drawTapePoster(scene);

@@ -49,7 +49,9 @@ export function createLifeTextures(scene) {
     p.line(12, 5, 8, 3, G[1]);
     p.rect(4, 2, 5, 2, G[2]);
   });
-  if (!scene.anims.exists('bird_fly')) scene.anims.create({ key: 'bird_fly', frames: [{ key: 'bird_0' }, { key: 'bird_1' }], frameRate: 8, repeat: -1 });
+  // Анимацию пересоздаём: старая могла ссылаться на прежние текстуры птиц
+  if (scene.anims.exists('bird_fly')) scene.anims.remove('bird_fly');
+  scene.anims.create({ key: 'bird_fly', frames: [{ key: 'bird_0' }, { key: 'bird_1' }], frameRate: 8, repeat: -1 });
   // Кот сидит, хвост ходит
   const K = ramp(0x2a2030);
   const cat = (p, tail) => {
