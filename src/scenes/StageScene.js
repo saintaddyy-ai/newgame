@@ -4,6 +4,7 @@ import { BEAT, audioCtx, loadBuffer, playBuffer, sfx } from '../audio.js';
 import { karaokeTimeline } from '../demos.js';
 import { addActor, play as actorPlay } from '../gfx/actors.js';
 import { ART } from '../gfx/pix.js';
+import { paintStageBack, crowdBackTextures } from '../gfx/places/scenes.js';
 
 const FONT = '"PT Mono", monospace';
 const PIXEL = '"Press Start 2P"';
@@ -48,14 +49,8 @@ export class StageScene extends Phaser.Scene {
   }
 
   drawStage() {
-    const g = this.add.graphics();
-    g.fillStyle(0x0c0a16, 1).fillRect(0, 0, 960, 540);
-    for (let y = 0; y < 300; y += 20) for (let x = (y / 20) % 2 ? 0 : 24; x < 960; x += 48) g.fillStyle(0x1a1420, 1).fillRect(x, y, 46, 18);
-    const title = this.add.text(480, 70, this.mode === 'stream' ? '«ЗЕРНО» · LIVE' : 'ПОДВАЛ', { fontFamily: PIXEL, fontSize: '30px', color: '#ff3d8a' }).setOrigin(0.5);
-    title.setShadow(0, 0, '#ff3d8a', 18, true, true);
-    // Сцена и прожекторы
-    g.fillStyle(0x2a2030, 1).fillRect(160, 300, 640, 30);
-    g.fillStyle(0x1a1420, 1).fillRect(160, 330, 640, 40);
+    this.add.rectangle(0, 0, 960, 540, 0x07060d).setOrigin(0);
+    this.add.image(0, 0, paintStageBack(this, { title: this.mode === 'stream' ? '«ЗЕРНО» LIVE' : 'ПОДВАЛ', stream: this.mode === 'stream' })).setOrigin(0).setScale(2);
     this.beams = [];
     [240, 480, 720].forEach((x, i) => {
       const b = this.add.triangle(0, 0, x, 0, x - 120, 330, x + 120, 330, [0xff3d8a, 0xffd166, 0x3df0ff][i], 0.1).setOrigin(0).setBlendMode(Phaser.BlendModes.ADD);
@@ -63,15 +58,15 @@ export class StageScene extends Phaser.Scene {
       this.tweens.add({ targets: b, angle: { from: -4, to: 4 }, duration: 1600 + i * 300, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     });
     // Марк у микрофона
-    g.fillStyle(0x2a2a2a, 1).fillRect(504, 200, 5, 100);
-    g.fillStyle(0x8a8a9a, 1).fillRect(500, 188, 12, 16);
-    this.mark = addActor(this, 470, 300, 'mark', { scale: 0.95 });
+    this.mark = addActor(this, 480, 300, 'mark', { scale: 0.95 });
     actorPlay(this.mark, 'hype');
-    // Толпа: ряды голов, качаются в такт
+    // Толпа со спины: головы, капюшоны, руки с телефонами — качаются в такт
     this.crowd = [];
+    const crowdKeys = crowdBackTextures(this);
     for (let row = 0; row < 3; row++) {
-      for (let x = -20 + row * 18; x < 980; x += 38) {
-        const c = this.add.ellipse(x + Math.random() * 10, 400 + row * 34, 34, 40, [0x15121f, 0x1e1a2e, 0x262036][row]);
+      for (let x = -20 + row * 18; x < 980; x += 40) {
+        const c = this.add.image(x + Math.random() * 10, 440 + row * 40, Phaser.Utils.Array.GetRandom(crowdKeys)).setOrigin(0.5, 1).setScale(2 + row * 0.25);
+        c.setTint([0x6a5a7a, 0x8a7a9a, 0xb0a0c0][row]);
         c.baseY = c.y;
         c.row = row;
         this.crowd.push(c);

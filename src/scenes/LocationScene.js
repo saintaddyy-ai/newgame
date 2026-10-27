@@ -10,7 +10,7 @@ import { sfx, startAmbience, stopAmbience, currentMusic, BEAT } from '../audio.j
 import { unreadTotal } from '../phone/model.js';
 import { repaintMark } from '../story/episode2/look.js';
 import * as phoneApi from '../phone/model.js';
-import { addActor, idle, walk, talk, startBlinks, isWalking } from '../gfx/actors.js';
+import { addActor, idle, walk, talk, pose, startBlinks, isWalking } from '../gfx/actors.js';
 import { lightSprite } from '../gfx/world.js';
 import { buildDoor, swingDoor } from '../gfx/doors.js';
 
@@ -67,6 +67,10 @@ export class LocationScene extends Phaser.Scene {
       const here = !n.when || n.when();
       if (!here && !n.dynamic) return;
       const s = addActor(this, n.x, FLOOR + (n.dy || 0), n.sprite, { flip: !!n.flip, scale: n.scale || 1, depth: n.depth ?? 10 });
+      if (n.pose) {
+        s.__pose = n.pose;
+        pose(s, n.pose);
+      }
       s.setVisible(here);
       this.npcs[n.id] = s;
     });

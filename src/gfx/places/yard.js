@@ -2,7 +2,7 @@
 // гаражи (№17 — студия Дэна), «Мерс» Рея, дом с аркой на улицу.
 // Координаты в пикселях арта: экранные x из сценариев делим на 2.
 import { makeWorld } from '../world.js';
-import { m, block, panels, flatWindow, balcony, entrance, garage, car, bench, swings, slide, trashBins, lampPost, puddle, manhole, graffiti, graffitiTag, poster, bricks, tree, bush, fence, wire, floorShadow, INK } from '../paint.js';
+import { m, block, panels, flatWindow, litWindow, balcony, entrance, garage, car, bench, swings, slide, trashBins, lampPost, puddle, manhole, graffiti, graffitiTag, poster, bricks, tree, bush, fence, wire, floorShadow, INK } from '../paint.js';
 import { farCity, midBlocks, yardGround } from './common.js';
 import { mix, rng, ramp } from '../color.js';
 import { GROUND } from '../pix.js';
@@ -29,8 +29,21 @@ export function paintYard(scene, width, { time = 'night', min, merc = false, ope
     const hx1 = 190;
     panels(p, 0, 0, hx1, FACADE, { c: 0x9a948a, r });
     // Окна: 1-й этаж (высокий цоколь), 2-й выше края экрана частично
-    for (const fx of [14, 128, 160]) flatWindow(p, fx, FACADE - m(3.6), m(1.3), m(1.45), { r, plant: r() < 0.3 });
-    for (const fx of [14, 50, 128, 160]) flatWindow(p, fx, FACADE - m(6.5), m(1.3), m(1.45), { r });
+    const lightUp = (fx, fy) => {
+      if (dark > 0.3 && r() < 0.5) {
+        const col = r() < 0.8 ? 0xffd27a : 0xffb070;
+        const sd = Math.floor(r() * 1e6);
+        ctx.emit.push([fx + 2, fy + 2, m(1.3) - 4, m(1.45) - 4, col, 0.12, (pp) => litWindow(pp, fx + 2, fy + 2, m(1.3) - 4, m(1.45) - 4, col, rng(sd))]);
+      }
+    };
+    for (const fx of [14, 128, 160]) {
+      flatWindow(p, fx, FACADE - m(3.6), m(1.3), m(1.45), { r, plant: r() < 0.3 });
+      lightUp(fx, FACADE - m(3.6));
+    }
+    for (const fx of [14, 50, 128, 160]) {
+      flatWindow(p, fx, FACADE - m(6.5), m(1.3), m(1.45), { r });
+      lightUp(fx, FACADE - m(6.5));
+    }
     balcony(p, 44, FACADE - m(5.2), m(2.2), { r });
     // Окно лестничной клетки над подъездом
     flatWindow(p, 70, FACADE - m(4.4), m(0.8), m(1.1), { r, curtains: false });

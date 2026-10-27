@@ -6,6 +6,8 @@ import { drawStreet, drawInterior, drawMetro, drawRooftop, drawPort, drawPromzon
 import { F, state, hasItem, now, at, day, exit, once, pickOne, quest, questStatus } from './common.js';
 import { isAt, whereIs, studioOccupant, isNight } from './world.js';
 import { castKey, personTexture, randomSpec } from './people.js';
+import { addActor } from '../../gfx/actors.js';
+import { paintCourtyards } from '../../gfx/places/misc.js';
 import { WORKERS, onShift, prepareWorkers } from './workers.js';
 import * as M from './main.js';
 import * as P from './podval.js';
@@ -234,15 +236,14 @@ const crossroads = {
       { x: 1700, w: 380, h: 320, color: 0x3a3440 },
       { x: 2100, w: 400, h: 340, color: 0x2e2a40 },
     ],
-    extras: (scene, g) => {
-      // «Подвал»: лестница вниз и неон
-      g.fillStyle(0x07060d, 1).fillRect(1060, FLOOR - 120, 120, 110);
-      for (let i = 0; i < 5; i++) g.fillStyle(0x3a3a44, 1).fillRect(1060, FLOOR - 120 + 24 + i * 18, 120, 4);
-      neon(scene, 1120, FLOOR - 170, 'ПОДВАЛ', '#3df0ff', 16);
-      metroEntrance(scene, g, 1500);
-      neon(scene, 1900, FLOOR - 220, '← КАФЕ-КВАРТАЛ →', '#ffd166', 9);
-      neon(scene, 2300, FLOOR - 230, 'ТОРГОВАЯ →', '#8ae6a0', 9);
-    },
+    features: [
+      { type: 'arch', x: 100 },
+      { type: 'podval', x: 1120 },
+      { type: 'metro', x: 1500 },
+      { type: 'neon', x: 1900, y: 236, text: '← КАФЕ-КВАРТАЛ →', color: '#ffd166' },
+      { type: 'neon', x: 2300, y: 236, text: 'ТОРГОВАЯ →', color: '#8ae6a0' },
+    ],
+    parked: [[1800, 0x3a5a8a, 1], [2180, 0xd8d8d8, -1]],
   }),
   prepare: (scene) => {
     ['cop', 'vika'].forEach((id) => castKey(scene, id));
@@ -296,7 +297,8 @@ const cafes = {
       { x: 1460, w: 380, h: 360, color: 0x1e1a2a, shop: true, sign: 'НОЧЬ', signColor: '#c77dff' },
       { x: 2000, w: 500, h: 300, color: 0x2e3440 },
     ],
-    extras: (scene) => neon(scene, 2250, FLOOR - 220, 'ДВОРЫ →', '#c9c4ee', 9),
+    features: [{ type: 'neon', x: 2250, y: 236, text: 'ДВОРЫ →', color: '#c9c4ee' }],
+    parked: [[2150, 0x8a3a2a, -1]],
   }),
   prepare: (scene) => {
     castKey(scene, 'mira');
@@ -366,11 +368,7 @@ const courtyards = {
   ambience: 'night',
   steps: 'stepWet',
   night: () => (isDarkNow() ? 0.4 : 0.1),
-  draw: (s) => drawInterior(s, 1800, {
-    wall: 'brick', wallColor: 0x3a2e2e, floor: 0x2b2b33,
-    props: [{ type: 'window', x: 200, y: 100 }, { type: 'window', x: 900, y: 120 }, { type: 'window', x: 1500, y: 90 },
-      { type: 'scribbles', x: 560, y: 180, lines: ['САМИЗДАТ', 'тишина — тоже бит'] }, { type: 'plant', x: 1200 }],
-  }),
+  draw: (s) => paintCourtyards(s, 1800),
   critters: () => (questStatus('e2_cat') === 'active' && !F.e2CatFound ? [] : [{ type: 'pigeons', x: 700, n: 3 }]),
   photoSpots: [{ id: 'e2_samizdat_wall', x: 600, line: { id: 'e2_photo_samizdat', text: 'На стене во дворе: «тишина — тоже бит»', tag: 'street' } }],
   async onEnter(ctx) {
@@ -487,7 +485,7 @@ const shawarma = {
   npcs: () => [
     { id: 'timur', name: 'Тимур', sprite: cast('timur'), x: 260, talk: timurTalk },
     { id: 'kira', name: 'Кира', sprite: cast('kira'), x: 520, flip: true, dynamic: true, when: () => isAt('kira', 'shawarma'), talk: G.kiraTalk },
-    { id: 'ray', name: 'Рей', sprite: 'ray', x: 420, flip: true, dy: -110, dynamic: true, when: () => isAt('ray', 'shawarma') && !F.busted, talk: (ctx) => M.rayTalk2(ctx, 'shawarma') },
+    { id: 'ray', name: 'Рей', sprite: 'ray', x: 420, flip: true, dy: -60, pose: 'sit', depth: 9, dynamic: true, when: () => isAt('ray', 'shawarma') && !F.busted, talk: (ctx) => M.rayTalk2(ctx, 'shawarma') },
   ],
   items: [exit(1040, 'Выйти на улицу', 'crossroads', 760, { cost: 2, facing: 'left' })],
 };
@@ -697,12 +695,7 @@ const podval_entrance = {
     seed: 61,
     lamps: [500],
     buildings: [{ x: 0, w: 1400, h: 360, color: 0x2a2236 }],
-    extras: (scene, g) => {
-      g.fillStyle(0x07060d, 1).fillRect(940, FLOOR - 150, 140, 140);
-      for (let i = 0; i < 6; i++) g.fillStyle(0x3a3a44, 1).fillRect(940, FLOOR - 150 + 30 + i * 18, 140, 4);
-      neon(scene, 1010, FLOOR - 200, 'ПОДВАЛ', '#3df0ff', 20);
-      if (day() === 'fri') scene.add.image(760, 300, 'poster_openmic').setDisplaySize(70, 91);
-    },
+    features: [{ type: 'podval', x: 1010 }, ...(day() === 'fri' ? [{ type: 'posterImg', key: 'poster_openmic', x: 760, y: 330, w: 52, h: 68, angle: 2 }] : [])],
   }),
   prepare: (scene) => {
     ['bulldog', 'mira'].forEach((id) => castKey(scene, id));
@@ -749,10 +742,12 @@ const podval = {
   night: 0.25,
   draw: (s) => {
     drawInterior(s, 1600, { wall: 'brick', wallColor: 0x3a1a20, floor: 0x15121f, props: podvalProps });
-    // Толпа силуэтами у сцены
-    for (let x = 520; x < 1300; x += 34) {
-      const c = s.add.ellipse(x + Math.random() * 10, 470, 30, 60, 0x0c0a12).setOrigin(0.5, 1).setDepth(15).setAlpha(0.9);
-      s.tweens.add({ targets: c, y: c.y - 6, duration: 360, yoyo: true, repeat: -1, delay: Math.random() * 400 });
+    // Толпа у сцены: живые люди в полумраке, качаются под бит
+    for (let x = 560, i = 0; x < 1300; x += 46 + (i % 3) * 8, i++) {
+      const key = personTexture(s, randomSpec(`crowd_${i}`), null, 'crowd');
+      const c = addActor(s, x + Math.random() * 10, 478 + (i % 2) * 6, key, { depth: 15 + (i % 2), flip: Math.random() < 0.3, scale: 1.02 }).setTint(0x4a3a5a);
+      c.__noLight = true;
+      s.tweens.add({ targets: c, y: c.y - 5, duration: 366, yoyo: true, repeat: -1, delay: Math.random() * 360 });
     }
   },
   lamps: [{ x: 910, y: 120, r: 200, color: 0xff3d8a, alpha: 0.4 }, { x: 760, y: 60, r: 120, color: 0x3df0ff, alpha: 0.4 }, { x: 1060, y: 60, r: 120, color: 0xffd166, alpha: 0.4 }],
@@ -919,13 +914,7 @@ const rechnaya = {
   ambience: 'street',
   steps: 'stepConcrete',
   night: () => (isDarkNow() ? 0.35 : 0),
-  draw: (s) => {
-    drawRechnaya(s, 2000);
-    const g = s.add.graphics();
-    g.fillStyle(0x2a2a30, 1).fillRect(1500, 300, 200, 170);
-    g.fillStyle(0x07060d, 1).fillRect(1560, 360, 80, 110);
-    neon(s, 1600, 330, 'САМИЗДАТ', '#8ae6a0', 10);
-  },
+  draw: (s) => drawRechnaya(s, 2000),
   npcs: () => [{ id: 'adam', name: 'Адам', sprite: 'adam', x: 1400, flip: true, dynamic: true, when: () => isAt('adam', 'rechnaya'), talk: S.adamRechnaya }],
   photoSpots: [{ id: 'e2_river', x: 900, range: 600, text: 'Река тёмная и медленная — как бит на 70 BPM' }],
   items: [
@@ -948,11 +937,7 @@ const arena = {
     seed: 81,
     lamps: [400, 1400],
     buildings: [{ x: 300, w: 1300, h: 420, color: 0x2a2a3a }],
-    extras: (scene, g) => {
-      g.fillStyle(0x3a3a4a, 1).fillRect(300, 60, 1300, 30);
-      neon(scene, 950, 140, 'АРЕНА · 20 000 МЕСТ', '#ffd166', 18);
-      scene.add.image(700, 300, 'poster_arena').setDisplaySize(120, 170);
-    },
+    features: [{ type: 'neon', x: 950, y: 150, text: 'АРЕНА · 20 000 МЕСТ', color: '#ffd166', size: 18 }, { type: 'posterImg', key: 'poster_arena', x: 700, y: 330, w: 60, h: 86 }],
   }),
   prepare: prepCast(['olymp']),
   photoSpots: [{ id: 'e2_arena', x: 950, range: 600, line: { id: 'e2_photo_arena', text: 'Сфоткался у «Арены». Однажды — изнутри', tag: 'dream' } }],

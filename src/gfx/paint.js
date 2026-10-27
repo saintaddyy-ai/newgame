@@ -645,10 +645,8 @@ export function panelBlock(p, x, base, { floors = 9, sections = 3, k = 0.45, c =
         const on = r() < lit;
         const col = r() < 0.72 ? 0xffd27a : r() < 0.5 ? 0x9ab8ff : 0xffa86a;
         if (on && emit) {
-          emit.push([wx, wy, ww, wh, col, 0.12]);
-          // Переплёт и занавеска поверх света
-          emit.push([wx + Math.floor(ww / 2), wy, 1, wh, mix(col, 0x3a2a20, 0.55), 0]);
-          if (r() < 0.5) emit.push([wx, wy, Math.max(1, Math.round(ww * 0.25)), wh, mix(col, 0x8a3a2a, 0.35), 0]);
+          const seed = r();
+          emit.push([wx, wy, ww, wh, col, 0.1, (pp) => litWindow(pp, wx, wy, ww, wh, col, rng(Math.floor(seed * 1e6)))]);
         } else {
           p.rect(wx - 1, wy - 1, ww + 2, wh + 2, rp[3]);
           p.gradV(wx, wy, ww, wh, skyCol.map((cc) => mix(cc, rp[0], 0.35)));
@@ -673,4 +671,27 @@ export function panelBlock(p, x, base, { floors = 9, sections = 3, k = 0.45, c =
     if (lit > 0.1 && emit) emit.push([ex + Math.floor(ew / 2) - 1, base - eh - 1, 2, 1, 0xfff0c0, 0.3]);
   }
   return { w, top };
+}
+
+// Горящее окно: тёплый свет с градиентом, занавески, переплёт, иногда силуэт или люстра
+export function litWindow(p, x, y, w, h, col, r = Math.random) {
+  const top = mix(col, 0xffffff, 0.25);
+  const bot = mix(col, 0x8a4a2a, 0.25);
+  p.gradV(x, y, w, h, [top, col, bot]);
+  if (w >= 4 && h >= 4) {
+    const cur = mix(col, [0x8a3a3a, 0x3a5a8a, 0x8a6a2a, 0x5a3a6a][Math.floor(r() * 4)], 0.55);
+    const cw = Math.max(1, Math.round(w * 0.22));
+    p.rect(x, y, cw, h, cur);
+    if (r() < 0.6) p.rect(x + w - cw, y, cw, h, cur);
+    p.vline(x + Math.floor(w / 2), y, h, mix(col, 0x2a1a14, 0.6));
+    p.hline(x, y + Math.floor(h * 0.35), w, mix(col, 0x2a1a14, 0.6));
+    if (h >= 8 && r() < 0.25) {
+      // Силуэт человека в окне
+      const sx = x + cw + 1 + Math.floor(r() * Math.max(1, w - 2 * cw - 3));
+      p.rect(sx, y + Math.floor(h * 0.45), 2, h - Math.floor(h * 0.45), mix(col, 0x1a1020, 0.7));
+      p.rect(sx, y + Math.floor(h * 0.45) - 2, 2, 2, mix(col, 0x1a1020, 0.7));
+    } else if (h >= 8 && r() < 0.3) {
+      p.rect(x + Math.floor(w / 2) - 2, y + 1, 4, 2, mix(col, 0xffffff, 0.5));
+    }
+  }
 }

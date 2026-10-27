@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
 import { unlockAudio, sfx } from '../audio.js';
 import { state, resetState, readSave, loadGame, addLine, saveGame } from '../state.js';
-import { drawSkyline } from '../story/backdrops.js';
+import { paintTitle } from '../gfx/places/scenes.js';
+import { addActor, pose } from '../gfx/actors.js';
 import { startEpisode1 } from '../story/episode1.js';
 import { startEpisode2 } from '../story/episode2/main.js';
 
@@ -49,7 +50,10 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create() {
-    drawSkyline(this, 960, { seed: 7 });
+    paintTitle(this);
+    // Марк сидит на краю крыши и смотрит на город
+    const mark = addActor(this, 300, 506, 'mark', { depth: 2 });
+    pose(mark, 'sit');
     this.add.particles(0, -20, 'drop', {
       x: { min: -100, max: 1060 }, lifespan: 900, speedY: { min: 700, max: 900 }, speedX: -120,
       alpha: { start: 0.35, end: 0.1 }, quantity: 3, frequency: 16,

@@ -63,6 +63,18 @@ const BEHIND = {
     // Свет из комнаты падает на пол
     if (lit) p.tint(0, h - 8, w, 8, 0xffe0a0, 0.15);
   },
+  // Проём между соседними комнатами: слева одна стена, справа другая
+  between(p, w, h, { wall = 0x4a4f66, wallR = 0x4a4f66, floor = 0x4a3a3a, dark = 0 }) {
+    const half = Math.floor(w / 2);
+    const L = ramp(wall);
+    const R = ramp(wallR);
+    p.rect(0, 0, half, h, L[1]);
+    p.rect(half, 0, w - half, h, R[2]);
+    p.vline(half, 0, h - 8, mix(R[0], 0x1a1420, 0.5));
+    p.rect(0, h - 8, w, 8, floor);
+    p.hline(0, h - 9, w, mix(floor, 0x07060d, 0.4));
+    p.tint(0, 0, w, h, 0x0c0a14, 0.12 + dark * 0.3);
+  },
   // Ванная: голубая плитка, раковина с зеркалом, яркий свет
   bathroom(p, w, h) {
     p.rect(0, 0, w, h, 0x8ab4c8);
@@ -205,7 +217,7 @@ export function buildDoor(scene, d, { bottom, dark = 0 }) {
   // Проём
   const hole = new Pix(w + 8, h + 5);
   const inner = new Pix(w, h);
-  BEHIND[behind]?.(inner, w, h, { wall: d.inside ?? 0x4a4f66, floor: d.insideFloor ?? 0x3a2c24, dark });
+  BEHIND[behind]?.(inner, w, h, { wall: d.inside ?? 0x4a4f66, wallR: d.insideR ?? d.inside ?? 0x4a4f66, floor: d.insideFloor ?? 0x3a2c24, dark });
   // Наличник
   const fr = ramp(d.frame ?? (kind === 'interior' || kind === 'bath' ? 0xd8d0c0 : kind === 'flat' ? 0x6a4a3a : 0x4a4652));
   hole.rect(0, 0, w + 8, h + 5, fr[2]);

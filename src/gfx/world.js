@@ -13,7 +13,7 @@ export const HORIZON = GROUND - 58; // линия горизонта (урове
 export const layerBase = (f) => Math.round(HORIZON + (GROUND - HORIZON) * f);
 
 const CACHE = [];
-const MAX_CACHE = 18;
+const MAX_CACHE = 30;
 
 function remember(scene, key) {
   const i = CACHE.indexOf(key);
@@ -132,8 +132,8 @@ export function makeWorld(scene, width, { min, time = 'night', outdoor = true, k
           p.tint(366, 20, 28, 28, 0xf2e8c8, (x, y) => Math.max(0, 0.18 - Math.hypot(x - 380, y - 34) / 90));
         }
         p.texture(scene, k);
-        remember(scene, k);
       }
+      remember(scene, k);
       scene.add.image(0, 0, k).setOrigin(0).setScale(ART).setScrollFactor(0).setDepth(-100);
       // Облака плывут медленно
       if (clouds && quality() !== 'low') {
@@ -155,42 +155,50 @@ export function makeWorld(scene, width, { min, time = 'night', outdoor = true, k
             }
           }
           p.texture(scene, ck);
-          remember(scene, ck);
         }
+        remember(scene, ck);
         const c = scene.add.tileSprite(0, 0, 480, 80, ck).setOrigin(0).setScale(ART).setScrollFactor(0).setDepth(-99).setAlpha(dark > 0.5 ? 0.5 : 0.8);
-        scene.events.on('update', (time) => {
+        const drift = (time) => {
           if (c.active) c.tilePositionX = (time / 1000) * 1.5 + scene.cameras.main.scrollX * 0.02;
-        });
+        };
+        scene.events.on('update', drift);
+        scene.events.once('shutdown', () => scene.events.off('update', drift));
       }
     },
 
     // Слой с параллаксом f. paint(p, ctx) рисует в пикселях арта своего слоя.
-    layer(f, paint, { depth = -50 + f * 10, name = `L${f}`, front = false, seed = 1 } = {}) {
+    layer(f, paint, { depth = -50 + f * 10, name = `L${f}`, front = false, seed = 1, dark: layerDark } = {}) {
       const wArt = Math.ceil((960 + Math.max(0, width - 960) * f) / ART) + 2;
-      const k = `bg_${key}_${name}_${bucket}_${seed}`;
-      const ctx = { f, w: wArt, h: H, base: layerBase(f), env, dark, r: rng(seed * 101 + f * 997), lights: [], emit: [], emitFns: [], post: [], scene };
+      const dk = layerDark ?? dark;
+      const k = `bg_${key}_${name}_${bucket}_${Math.round(dk * 10)}_${seed}`;
+      const ctx = { f, w: wArt, h: H, base: layerBase(f), env, dark: dk, outDark: dark, r: rng(seed * 101 + f * 997), lights: [], emit: [], emitFns: [], post: [], scene };
+      // Свет для персонажей — по главному слою
+      if (f === 1 && !front && layerDark != null) env.dark = layerDark;
       if (!scene.textures.exists(k)) {
         const p = new Pix(wArt, H);
         paint(p, ctx);
         const albedo = new Uint32Array(p.d);
-        grade(p, dark, env.tint);
-        if (dark > 0.05) ctx.lights.forEach((L) => bake(p, albedo, { ...L, k: (L.k ?? 0.85) * Math.min(1, dark * 1.4) }));
-        ctx.emit.forEach(([x, y, w, h, c, halo]) => glowRect(p, x, y, w, h, c, halo));
-        ctx.emitFns.forEach((fn) => fn(p, dark));
+        grade(p, dk, layerDark != null ? 0x140f26 : env.tint);
+        if (dk > 0.05) ctx.lights.forEach((L) => bake(p, albedo, { ...L, k: (L.k ?? 0.85) * Math.min(1, dk * 1.4) }));
+        ctx.emit.forEach(([x, y, w, h, c, halo, fn]) => {
+          glowRect(p, x, y, w, h, c, halo);
+          fn?.(p);
+        });
+        ctx.emitFns.forEach((fn) => fn(p, dk));
         ctx.post.forEach((fn) => fn(p));
         p.texture(scene, k);
-        remember(scene, k);
         scene.textures.get(k).__lights = ctx.lights;
       } else {
         // Повторный вход: картинка из кэша, но свет надо знать заново
         ctx.lights = scene.textures.get(k).__lights || [];
       }
+      remember(scene, k);
       const img = scene.add.image(0, 0, k).setOrigin(0).setScale(ART).setScrollFactor(f, 1).setDepth(front ? 40 : depth);
-      if (f === 1 && !front) {
+      if (f === 1 && !front && depth < 0) {
         ctx.lights.forEach((L) => {
           const s = { x: L.x * ART, y: L.y * ART, r: L.r * ART, color: L.color ?? 0xffd8a0, flicker: L.flicker, glow: L.glow !== false, ground: (L.ground ?? L.y) * ART };
           env.lights.push(s);
-          if (dark > 0.25 && s.glow) scene.autoLights.push({ x: s.x, y: s.y, r: Math.min(140, L.r * 1.1), color: s.color, flicker: L.flicker, alpha: 0.32 * dark + 0.05 });
+          if (dk > 0.25 && s.glow) scene.autoLights.push({ x: s.x, y: s.y, r: Math.min(140, L.r * 1.1), color: s.color, flicker: L.flicker, alpha: 0.32 * dk + 0.05 });
         });
       }
       return img;

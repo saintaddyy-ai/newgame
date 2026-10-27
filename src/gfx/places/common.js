@@ -3,30 +3,41 @@ import { m, cityBlock, panelBlock, tree, asphalt, sidewalk, curb, garage, fence,
 import { mix, ramp, rng } from '../color.js';
 import { HORIZON } from '../world.js';
 
-// Самый дальний план: силуэты города, телебашня, трубы. Окна горят по времени.
+// Самый дальний план: силуэты города в дымке, телебашня, трубы, огоньки окон точками
 export function farCity(p, ctx, { seed = 3, density = 1 } = {}) {
   const r = rng(seed);
   const { base, dark } = ctx;
-  const haze = mix(0x6a6a88, 0x1a1430, dark);
-  const lit = dark > 0.3 ? 0.18 + dark * 0.2 : 0;
-  // Самый дальний ряд — почти силуэт
-  for (let x = -10; x < ctx.w; x += 14 + r() * 26 / density) {
-    cityBlock(p, x, base - 2, { floors: 10 + Math.floor(r() * 14), sections: 1 + Math.floor(r() * 2), k: 0.13, c: mix(haze, 0x8a8aa8, 0.25 * (1 - dark)), r, lit: lit * 0.7, emit: ctx.emit });
+  const haze = mix(0x7a7a98, 0x1a1430, dark);
+  const near = mix(0x6a6a88, 0x15102a, dark);
+  const dot = (x, y, c) => (dark > 0.3 ? ctx.emitFns.push((pp) => pp.set(x, y, c)) : null);
+  // Дальний ряд — силуэты разной высоты
+  for (let x = -6; x < ctx.w; x += 6 + Math.floor(r() * 14 / density)) {
+    const w = 8 + Math.floor(r() * 14);
+    const h = 20 + Math.floor(r() * 40);
+    p.rect(x, base - h, w, h, haze);
+    if (r() < 0.2) p.vline(x + Math.floor(w / 2), base - h - 6, 6, haze);
+    for (let y = base - h + 2; y < base - 2; y += 3) for (let wx = x + 1; wx < x + w - 1; wx += 2) if (r() < 0.12) dot(wx, y, r() < 0.8 ? 0xd8b070 : 0x8aa0d8);
   }
   // Телебашня с огоньком
   const tx = Math.floor(ctx.w * 0.62);
-  const tc = mix(haze, 0x000000, 0.15);
-  p.poly([[tx - 4, base], [tx - 1, base - 120], [tx + 1, base - 120], [tx + 4, base]], tc);
-  p.rect(tx - 3, base - 92, 7, 5, tc);
-  p.vline(tx, base - 138, 18, tc);
-  if (dark > 0.3) ctx.emit.push([tx, base - 139, 1, 1, 0xff3d3d, 0.4]);
-  // Заводская труба с полосами
+  p.poly([[tx - 3, base], [tx - 1, base - 90], [tx + 1, base - 90], [tx + 3, base]], haze);
+  p.rect(tx - 3, base - 68, 7, 4, haze);
+  p.vline(tx, base - 104, 14, haze);
+  if (dark > 0.3) ctx.emitFns.push((pp) => pp.set(tx, base - 105, 0xff3d3d));
+  // Заводская труба
   const cx = Math.floor(ctx.w * 0.18);
-  p.rect(cx, base - 70, 5, 70, tc);
-  for (let y = base - 66; y < base - 20; y += 12) p.rect(cx, y, 5, 3, mix(tc, 0x8a3a3a, 0.4));
-  // Ближе — ряд домов покрупнее
-  for (let x = -6; x < ctx.w; x += 30 + r() * 30 / density) {
-    cityBlock(p, x, base, { floors: 9 + Math.floor(r() * 8), sections: 1 + Math.floor(r() * 2), k: 0.2, c: mix(haze, 0x9a9ab8, 0.2 * (1 - dark)), r, lit, emit: ctx.emit });
+  p.rect(cx, base - 54, 4, 54, haze);
+  for (let y = base - 50; y < base - 14; y += 9) p.rect(cx, y, 4, 2, mix(haze, 0xa04a4a, 0.4));
+  // Ряд ближе — панельки силуэтами с окнами-точками
+  for (let x = -4; x < ctx.w; x += 18 + Math.floor(r() * 26 / density)) {
+    const w = 14 + Math.floor(r() * 18);
+    const h = 18 + Math.floor(r() * 26);
+    p.rect(x, base - h, w, h, near);
+    p.hline(x, base - h, w, mix(near, 0xffffff, 0.08));
+    for (let y = base - h + 3; y < base - 2; y += 4) for (let wx = x + 2; wx < x + w - 2; wx += 3) {
+      if (dark > 0.3 && r() < 0.18) dot(wx, y, r() < 0.75 ? 0xffd27a : 0x9ab8ff);
+      else if (dark <= 0.3 && r() < 0.5) p.set(wx, y, mix(near, 0x2a2a40, 0.4));
+    }
   }
 }
 
@@ -34,7 +45,7 @@ export function farCity(p, ctx, { seed = 3, density = 1 } = {}) {
 export function midBlocks(p, ctx, { seed = 5, garages = false, trees = true, gap = 0 } = {}) {
   const r = rng(seed);
   const { base, dark } = ctx;
-  const lit = dark > 0.25 ? 0.25 + dark * 0.2 : 0;
+  const lit = dark > 0.25 ? 0.18 + dark * 0.14 : 0;
   let x = -20 + gap;
   while (x < ctx.w) {
     const sec = 2 + Math.floor(r() * 3);

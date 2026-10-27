@@ -42,9 +42,10 @@ export function play(s, anim, restart = false) {
   }
 }
 
-// Стоит и дышит; у каждого свой ритм
+// Стоит и дышит; у каждого свой ритм. Сидящий (s.__pose) остаётся в своей позе.
 export function idle(s) {
   if (!s || !s.__actor) return;
+  if (s.__pose && pose(s, s.__pose)) return;
   const k = `${s.__actor}@idle`;
   if (s.anims.currentAnim?.key === k && s.anims.isPlaying) return;
   if (s.scene.anims.exists(k)) {
@@ -55,6 +56,7 @@ export function idle(s) {
 
 export function walk(s, sneak = false) {
   if (!s || !s.__actor) return;
+  s.__pose = null;
   const anim = sneak && has(s, 'sneak_0') ? 'sneak' : 'walk';
   const k = `${s.__actor}@${anim}`;
   if (s.anims.currentAnim?.key !== k || !s.anims.isPlaying) s.play(k);
@@ -62,6 +64,7 @@ export function walk(s, sneak = false) {
 }
 
 export function talk(s) {
+  if (s?.__pose) return;
   play(s, 'talk');
 }
 
