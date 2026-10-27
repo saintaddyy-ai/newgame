@@ -265,8 +265,12 @@ async function checkRaid(ctx) {
 // ---------- Курьер: часть 3 — облава ----------
 
 export async function raid(ctx) {
-  const { d, start, sfx } = ctx;
+  const { d, start, sfx, fx, scene } = ctx;
   sfx('siren');
+  // Синие и красные отблески мигалки, камера дёргается
+  fx.shake(500, 0.008);
+  const flash = scene.add.rectangle(0, 0, 960, 540, 0x3a5aff, 0).setOrigin(0).setScrollFactor(0).setDepth(880).setBlendMode('ADD');
+  scene.tweens.add({ targets: flash, fillAlpha: 0.16, duration: 220, yoyo: true, repeat: -1, onRepeat: () => flash.setFillStyle(flash.fillColor === 0x3a5aff ? 0xff3a5a : 0x3a5aff, flash.fillAlpha) });
   await d.think('Сирена. Синие отблески на стенах. Кто-то кричит «Стоять!» — и это мне.');
   const c = await d.choose(['[Бежать дворами]', '[Сдаться]'], { timer: 4, timeoutIndex: 0 });
   if (c === 1) return busted(ctx);

@@ -661,6 +661,7 @@ const metro = {
       ctx.sfx('subway');
       ctx.d.close();
       await trainArrive(ctx.scene, 1900, station().line, { leave: false });
+      await ctx.ride();
       ctx.time(20);
       F.e2Station = id;
       await ctx.card(`СТ. «${STATIONS[id].name.toUpperCase()}»`, '20 минут в вагоне');

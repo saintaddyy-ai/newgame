@@ -71,7 +71,7 @@ export const CAST = {
   kira: { garment: 'leather', h: 59, female: true, hair: 'long', hairColor: '#1a1410', skin: '#f0d0b0', top: '#1a1a1e', accent: '#7a3ac8', pants: '#1a1a1e', shoes: '#1a1a1a', piercing: true, lipstick: '#1a1a1e' },
   vika: { h: 56, female: true, hair: 'bun', hairColor: '#b03030', skin: '#e3b48c', top: '#8a3a6a', accent: '#ffd166', pants: '#1a1a1e', shoes: '#c03a3a', dress: true, lipstick: '#c03a5a' },
   timur: { garment: 'tee', build: 'heavy', h: 62, female: false, hair: 'short', hairColor: '#1a1410', skin: '#c89070', top: '#e8e8e8', accent: '#c0303a', pants: '#2a2a2a', shoes: '#1a1a1a', apron: '#c0303a', mustache: true },
-  bulldog: { garment: 'tee', build: 'heavy', h: 66, female: false, hair: 'bald', hairColor: '#1a1410', skin: '#e8bc98', top: '#1a1a1e', accent: '#e8e8e8', pants: '#1e1e26', shoes: '#1a1a1a', chain: true },
+  bulldog: { garment: 'tee', build: 'heavy', h: 66, smoker: true, female: false, hair: 'bald', hairColor: '#1a1410', skin: '#e8bc98', top: '#1a1a1e', accent: '#e8e8e8', pants: '#1e1e26', shoes: '#1a1a1a', chain: true },
   barber: { garment: 'shirt', h: 61, female: false, hair: 'curly', hairColor: '#1a1410', skin: '#e3b48c', top: '#1a1a1e', accent: '#e8e8e8', pants: '#2a2a2a', shoes: '#5a3a2a', mustache: true, apron: '#2a2a2a' },
   tattoo: { garment: 'tee', h: 57, female: true, hair: 'mohawk', hairColor: '#3df0ff', skin: '#f0d0b0', top: '#1a1a1e', accent: '#ff3d8a', pants: '#1a1a1e', shoes: '#1a1a1a', piercing: true },
   photolab: { garment: 'cardigan', h: 60, female: false, hair: 'bald', hairColor: '#8a8a8a', skin: '#e8bc98', top: '#7a5a8c', accent: '#e8e8e8', pants: '#3a3448', shoes: '#5a3a2a', glasses: true },

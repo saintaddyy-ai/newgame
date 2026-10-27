@@ -22,11 +22,11 @@ export const CAST_SPECS = {
   // Рома (3g0th2002): рыжие кудри на глаза, пирсинг, усики, чёрное худи
   roma: { h: 61, build: 'slim', hair: 'curlsEyes', hairColor: '#d0742a', skin: '#e8c0a0', piercing: true, mustache: true, garment: 'hoodie', topColor: '#1e1e26', pants: '#1a1a22', shoes: '#1a1a1a', dark: true },
   // Палыч: бригадир, кепка, оранжевый жилет, пузо
-  palych: { h: 64, build: 'heavy', hair: 'short', cap: true, capColor: '#2a3a6a', hairColor: '#5a4a3a', skin: '#d8a080', mustache: true, garment: 'vest', topColor: '#ff8a20', sleeveColor: '#4a4a52', pants: '#2a3040', shoes: '#1a1a1a', shoeType: 'boots' },
+  palych: { h: 64, smoker: true, build: 'heavy', hair: 'short', cap: true, capColor: '#2a3a6a', hairColor: '#5a4a3a', skin: '#d8a080', mustache: true, garment: 'vest', topColor: '#ff8a20', sleeveColor: '#4a4a52', pants: '#2a3040', shoes: '#1a1a1a', shoeType: 'boots' },
   // Ахмед: грузчик, борода, синий комбинезон
   akhmed: { h: 66, build: 'heavy', hair: 'short', hairColor: '#141010', beard: true, skin: '#c8946c', garment: 'overalls', topColor: '#2a4a8a', accent: '#1e3a7a', sleeveColor: '#9a9aa2', pants: '#2a4a8a', shoes: '#3a2a1a', shoeType: 'boots' },
   // Гоша с барахолки: шапка, провода на шее
-  gosha: { h: 60, hair: 'short', beanie: true, capColor: '#6a2a8a', hairColor: '#3a2a1a', skin: '#e0b898', garment: 'jacket', topColor: '#4a6a4a', accent: '#2a2a2a', headphones: true, pants: '#3a3a3a', shoes: '#5a3a2a', shoeType: 'boots' },
+  gosha: { h: 60, smoker: true, hair: 'short', beanie: true, capColor: '#6a2a8a', hairColor: '#3a2a1a', skin: '#e0b898', garment: 'jacket', topColor: '#4a6a4a', accent: '#2a2a2a', headphones: true, pants: '#3a3a3a', shoes: '#5a3a2a', shoeType: 'boots' },
   // Лёва из ломбарда: лысина, очки, кардиган, золотая цепь
   leva: { h: 60, build: 'heavy', hair: 'buzz', hairColor: '#b8b8b8', glasses: 'round', skin: '#e0b090', garment: 'cardigan', topColor: '#6a5a4a', accent: '#e8e0d0', chain: '#d8b040', pants: '#3a3448', shoes: '#2a1a1a', shoeType: 'boots' },
   // Тётя Люба (соседка, Эп.1)

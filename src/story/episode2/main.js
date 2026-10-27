@@ -172,7 +172,11 @@ export async function sleepHere(ctx, place = 'home') {
     const c = await d.choose(['Поспать пару часов (+энергия)', 'Нет']);
     if (c === 1) return;
     energy(35);
+    d.close();
+    await ctx.lieDown();
     ctx.time(120);
+    ctx.standUp();
+    ctx.scene.cameras.main.flash(500, 7, 6, 13);
     return d.think('Проваливаюсь в сон. Просыпаюсь через два часа — будто через неделю.');
   }
   if (day() === 'sun') return endSunday(ctx, place);
@@ -183,6 +187,7 @@ export async function sleepHere(ctx, place = 'home') {
   if (place !== 'home') F.e2NightsOut = (F.e2NightsOut || 0) + 1;
   await d.think(pickOne(['Потолок. Строчки. Потолок.', 'Засыпаю под гул холодильника.', 'Город за окном шумит, как бит, который ещё не записан.']));
   d.close();
+  await ctx.lieDown();
   state.energy = place === 'home' ? 100 : 80;
   nextDay();
   F.acidNow = false;

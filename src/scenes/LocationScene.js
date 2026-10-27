@@ -11,7 +11,8 @@ import { sfx, startAmbience, stopAmbience, currentMusic, BEAT } from '../audio.j
 import { unreadTotal } from '../phone/model.js';
 import { repaintMark } from '../story/episode2/look.js';
 import * as phoneApi from '../phone/model.js';
-import { addActor, idle, walk, talk, pose, startBlinks, isWalking } from '../gfx/actors.js';
+import { addActor, idle, walk, talk, pose, play, gesture, startBlinks, isWalking } from '../gfx/actors.js';
+import { USE_POSE, makeMirror, mirrorCloseup, fridgeOpen, lieDown, standUp, shower, rideCloseup, npcLife } from '../gfx/actions.js';
 import { lightSprite } from '../gfx/world.js';
 import { buildDoor, swingDoor } from '../gfx/doors.js';
 import { rain, fog, snow, dust } from '../gfx/weather.js';
@@ -48,6 +49,7 @@ export class LocationScene extends Phaser.Scene {
     this.lastPrompt = null;
     this.sneaking = false;
     this.turning = false;
+    this.__texting = false;
     this.zonesFired = new Set();
     this.autoLights = undefined;
     this.lightEnv = undefined;
@@ -83,6 +85,8 @@ export class LocationScene extends Phaser.Scene {
 
     this.player = addActor(this, spawnX ?? cfg.spawnX, FLOOR, 'mark', { depth: 20, flip: facing === 'left' });
     this.blinks = startBlinks(this, () => [this.player, ...Object.values(this.npcs)]);
+    this.mirror = makeMirror(this);
+    this.npcLifeEvent = npcLife(this);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12, 0, 40);
 
     if (cfg.foreground) cfg.foreground(this);
@@ -133,6 +137,7 @@ export class LocationScene extends Phaser.Scene {
       if (!spr || isWalking(spr)) return;
       talk(spr);
       spr.__talkUntil = this.time.now + Math.min(3200, 500 + text.length * 38);
+      if (emo === 'shout') this.cameras.main.shake(140, 0.0025);
       if (emo === 'shout' && !spr.__hop) {
         spr.__hop = true;
         const y0 = spr.y;
@@ -214,23 +219,34 @@ export class LocationScene extends Phaser.Scene {
       phone: { ...phoneApi, ring: (from, script, opts) => this.phone.ring(from, script, opts), open: (page, arg) => this.phone.show(page, arg) },
       time: (min) => advanceTime(this, min),
       toast: (title, text, color) => this.showToast(title, text, color),
+      // Анимации: anim('eat', 1200) — герой; anim('smoke', 2000, 'palych') — NPC
+      anim: (name, ms = 900, who) => gesture(this, who ? this.npcs[who] : this.player, name, ms),
+      lieDown: (x) => lieDown(this, x ?? this.player.x),
+      standUp: () => standUp(this),
+      shower: (x) => shower(this, x ?? this.player.x),
+      ride: () => rideCloseup(this),
+      mirror: () => mirrorCloseup(this),
     };
   }
 
-  async runScript(fn, { cost = 0 } = {}) {
+  async runScript(fn, { cost = 0, pose: usePose, cleanup } = {}) {
     this.phone.deferRinging();
     if (this.phone.open) this.phone.hide(true);
     this.busy = true;
     this.prompt.setVisible(false);
     idle(this.player);
+    // Пока идёт сценарий у предмета — герой что-то с ним делает (смотрит, тянется, умывается)
+    if (usePose) play(this.player, usePose, true);
     try {
       await fn(this.ctx);
     } catch (e) {
       console.error(e);
     } finally {
+      cleanup?.();
       if (this.scene.isActive() && !this.leaving) {
         this.dialogue.close();
         this.hideCloseup();
+        if (usePose && !this.player.__pose) idle(this.player);
         this.busy = false;
         this.useCooldown = this.time.now + 400;
         if (cost) advanceTime(this, cost);
@@ -283,7 +299,20 @@ export class LocationScene extends Phaser.Scene {
       this.player.setFlipX(it.npc.x < tx);
       it.npc.setFlipX(tx < it.npc.x);
     }
-    this.runScript(it.use, { cost: state.episode === 'ep2' ? it.cost ?? 0 : 0 });
+    let usePose = it.npc ? null : it.pose ?? USE_POSE[it.sfx];
+    let cleanup = null;
+    if (!it.npc) this.player.setFlipX(it.x < this.player.x - 4);
+    if (it.sfx === 'fridge') cleanup = fridgeOpen(this, it.x);
+    // Зеркало дома и в ванной — крупный план с отражением
+    const mr = this.mirrorRect;
+    if (mr && (it.sfx === 'mirror' || it.sfx === 'water') && Math.abs(it.x - (mr.x + mr.w / 2)) < 120) {
+      const run = it.use;
+      return this.runScript(async (ctx) => {
+        ctx.mirror();
+        await run(ctx);
+      }, { cost: state.episode === 'ep2' ? it.cost ?? 0 : 0, pose: usePose, cleanup });
+    }
+    this.runScript(it.use, { cost: state.episode === 'ep2' ? it.cost ?? 0 : 0, pose: usePose, cleanup });
   }
 
   update(time, dt) {
@@ -301,6 +330,14 @@ export class LocationScene extends Phaser.Scene {
     this.heatBar?.setVisible(free && state.flags.courierActive);
     this.updateDoors();
     this.updateActorsLight();
+    // Открыл телефон — смотрит в экран
+    if (this.phone.open && !this.busy && !this.__texting) {
+      this.__texting = true;
+      pose(this.player, 'text');
+    } else if (!this.phone.open && this.__texting) {
+      this.__texting = false;
+      if (!this.busy) idle(this.player);
+    }
     this.pulseToBeat();
     this.cfg.tick?.(this, dt);
     if (!this.busy) this.phone.flushQueue();
@@ -805,7 +842,12 @@ export class LocationScene extends Phaser.Scene {
   callPill(name) {
     this.pill?.destroy();
     this.pill = null;
-    if (!name) return;
+    // Во время звонка — телефон у уха
+    if (!name) {
+      if ((this.player.anims.currentAnim?.key || '').endsWith('@phone')) idle(this.player);
+      return;
+    }
+    play(this.player, 'phone', true);
     const c = (this.pill = uiContainer(this, 20, 494, 1200));
     const t = this.add.text(36, 0, `${name} · 00:00`, { fontFamily: '"PT Mono", monospace', fontSize: '15px', color: '#ffffff' }).setOrigin(0, 0.5);
     const bg = this.add.rectangle(0, 0, t.width + 52, 32, 0x0c2a1a, 0.92).setOrigin(0, 0.5).setStrokeStyle(2, 0x3ad86a);
@@ -840,6 +882,8 @@ export class LocationScene extends Phaser.Scene {
 
   addCash(delta, label) {
     if (delta) bankTx(delta, label);
+    // Отдаёт деньги — протягивает руку; получает — берёт
+    if (delta && !isWalking(this.player) && !this.player.__pose) gesture(this, this.player, delta < 0 ? 'give' : 'pick', 600);
     state.cash = Math.max(0, state.cash + delta);
     this.refreshHud();
     sfx(delta >= 0 ? 'coins' : 'deny');
@@ -851,6 +895,7 @@ export class LocationScene extends Phaser.Scene {
   }
 
   giveItemFx(id) {
+    if (!isWalking(this.player)) gesture(this, this.player, 'pick', 700);
     giveItem(id);
     sfx('select');
     this.showToast('В КАРМАНЕ', ITEMS[id] || id, '#3df0ff');

@@ -747,11 +747,12 @@ async function grannyTalk({ d, line }) {
 
 // ---------- Сон и утро ----------
 
-async function sleep({ d, card, go }) {
+async function sleep({ d, card, go, lieDown }) {
   const p = phase();
   if (p === 'tue_night') {
     await d.think('Ложусь. Потолок. Пятнадцать тысяч. Потолок. Рей. Потолок.');
     d.close();
+    await lieDown();
     endAcid();
     setPhase('wed');
     saveGame({ loc: 'apartment', spawnX: 200 });
@@ -767,6 +768,7 @@ async function sleep({ d, card, go }) {
     }
     await d.think('Засыпаю под гул холодильника. Снится, что я на сцене, а микрофон — это банан.');
     d.close();
+    await lieDown();
     endAcid();
     setPhase('thu');
     await card('ЧЕТВЕРГ', 'до «Подвала» — один день');
@@ -780,6 +782,7 @@ async function sleep({ d, card, go }) {
   const next = p === 'wed' ? 'wed_night' : 'thu_eve';
   await d.think(next === 'wed_night' ? 'Закрываю глаза на минуту. Открываю — за окном темно.' : 'Проваливаюсь в сон. Просыпаюсь от сообщения Дэна: «ТЫ ГДЕ».');
   d.close();
+  await lieDown();
   setPhase(next);
   await card(next === 'wed_night' ? 'СРЕДА · НОЧЬ' : 'ЧЕТВЕРГ · ВЕЧЕР', next === 'wed_night' ? 'мама скоро придёт со смены' : 'Дэн ждёт в гараже');
   go('apartment', 200);
@@ -1343,6 +1346,7 @@ async function sleepInGarage(ctx) {
   }
   await d.say('Дэн', 'Плед в шкафу. Если ночью замёрзнешь — бабушкин ковёр снимай. Шучу. Не трогай ковёр.');
   d.close();
+  await ctx.lieDown(210);
   F.sleptOut = (F.sleptOut || 0) + 1;
   endAcid();
   const next = phase() === 'tue_night' ? 'wed' : 'thu';

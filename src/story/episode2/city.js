@@ -29,6 +29,9 @@ export async function workerTalk(ctx, w) {
     const item = menu.find((x) => x[0] === pick.slice(4));
     if (state.cash < item[1]) return d.say(w.name, m <= -1 ? 'Денег нет? До свидания.' : 'Не хватает… Ну, в другой раз.');
     ctx.cash(-item[1], item[0]);
+    // Ест или пьёт тут же, у стойки
+    d.close();
+    await ctx.anim('eat', 1400);
     energy(item[2]);
     ctx.time(15);
     if (item[0] === 'Коктейль «Подвал»') pulse(-1);
@@ -160,6 +163,10 @@ export async function barberTalk(ctx) {
   const cut = HAIRCUTS.find((h) => h[0] === pick);
   if (state.cash < cut[2]) return d.say('Хачик', 'Дорогой, денег нет — красоты нет. Приходи богатым. Или хотя бы с чаевыми.');
   ctx.cash(-cut[2], `стрижка: ${cut[1]}`);
+  d.close();
+  ctx.scene.player.__pose = 'sit';
+  await ctx.anim('sit', 1200);
+  ctx.scene.player.__pose = null;
   sfx('scissors');
   ctx.time(60);
   fx.dust(ctx.scene.player.x, 300, 80);
@@ -212,6 +219,8 @@ export async function clothesTalk(ctx, w) {
   if (pick === 'bye') return;
   if (pick === 'default') {
     F.lookOutfit = null;
+    d.close();
+    await ctx.anim('dress', 900);
     repaintMark(ctx.scene);
     return d.think('Моё худи. Как домой вернулся.');
   }
@@ -225,6 +234,10 @@ export async function clothesTalk(ctx, w) {
     F[`look_${pick}`] = true;
     markLook(pick === 'leather' ? 2 : 1);
   }
+  // Переодевается в примерочной: руки вверх, вспышка — и новый образ
+  d.close();
+  await ctx.anim('dress', 1000);
+  ctx.fx.screenFlash(0xffffff, 200);
   repaintMark(ctx.scene);
   if (pick === 'leopard') {
     pulse(-2);

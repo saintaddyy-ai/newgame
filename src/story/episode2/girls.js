@@ -47,6 +47,8 @@ export async function kiraTalk(ctx) {
   if (pick === 'eat') {
     if (state.cash < 250) return d.think('Денег нет. Даже на трупик.');
     ctx.cash(-250, 'шаурма');
+    d.close();
+    await ctx.anim('eat', 1600);
     energy(30);
     ctx.time(20);
     return d.think('Горячо, остро, жирно. Ровно то, что надо.');
