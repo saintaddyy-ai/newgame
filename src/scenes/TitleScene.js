@@ -94,6 +94,8 @@ export class TitleScene extends Phaser.Scene {
     });
     this.select(0);
 
+    // Полоса под подсказкой: граффити «ТЕНЬ» на крыше не лезет в текст
+    this.add.rectangle(480, 507, 960, 26, 0x07060d, 0.78).setDepth(9);
     this.add.text(480, 506, 'ПРОЛОГ + 2 ЭПИЗОДА  |  18+  |  ← → ходить · Shift тихо · E действие · Q тетрадь · P телефон', {
       fontFamily: '"PT Mono", monospace', fontSize: '14px', color: '#77729a',
     }).setOrigin(0.5).setDepth(10);

@@ -46,7 +46,8 @@ export const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
 export function exit(x, label, to, spawnX, { cost = 5, when, open, facing, sfxName = 'click', card } = {}) {
   return {
     x, sfx: sfxName, when,
-    label: () => (open && !open() ? `${label} · закрыто` : label),
+    // Время на дорогу видно заранее: в Эп.2 часы решают, кого ты застанешь
+    label: () => (open && !open() ? `${label} · закрыто` : cost >= 5 ? `${label} · ${cost} мин` : label),
     async use(ctx) {
       if (open && !open()) {
         ctx.sfx('deny');

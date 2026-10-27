@@ -1108,6 +1108,7 @@ export class Phone {
         this.root.x = st.phoneX;
       } },
       { label: 'Графика', value: QUALITY_LABEL[st.graphics || 'high'], change: (d) => (st.graphics = cycle(['low', 'medium', 'high'], st.graphics || 'high', d)) },
+      { label: 'Яркость', value: `${Math.round((st.brightness || 1) * 100)}%`, change: (d) => (st.brightness = cycle([0.9, 1, 1.15, 1.3], st.brightness || 1, d)) },
       { label: 'Обои', value: String((state.phone.wallpaper % WALLPAPERS.length) + 1), change: (d) => (state.phone.wallpaper = (state.phone.wallpaper + d + WALLPAPERS.length) % WALLPAPERS.length) },
     ];
   }
@@ -1115,12 +1116,13 @@ export class Phone {
   page_settings() {
     this.header('НАСТРОЙКИ', 0x9a96b8);
     this.settingsRows().forEach((r, i) => {
-      const y = 50 + i * 33;
-      this.row(y, 30, () => {
-        this.text(14, y + 10, r.label, { fontSize: '12px' });
-        const minus = this.text(SW - 116, y + 8, '◀', { fontSize: '13px', color: '#9a96b8' });
-        this.text(SW - 64, y + 10, r.value, { fontSize: '12px', color: '#ffd166' }).setOrigin(0.5, 0);
-        const plus = this.text(SW - 22, y + 8, '▶', { fontSize: '13px', color: '#9a96b8' });
+      // 11 строк — шаг 30 px, чтобы подсказка внизу не налезала
+      const y = 50 + i * 30;
+      this.row(y, 27, () => {
+        this.text(14, y + 8, r.label, { fontSize: '12px' });
+        const minus = this.text(SW - 116, y + 6, '◀', { fontSize: '13px', color: '#9a96b8' });
+        this.text(SW - 64, y + 8, r.value, { fontSize: '12px', color: '#ffd166' }).setOrigin(0.5, 0);
+        const plus = this.text(SW - 22, y + 6, '▶', { fontSize: '13px', color: '#9a96b8' });
         minus.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.changeSetting(i, -1));
         plus.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.changeSetting(i, 1));
       }, () => this.changeSetting(i, 1));
@@ -1320,8 +1322,8 @@ export class Phone {
     const str = String(text);
     const t2 = s.add.text(x + 56, 26, str.length > 34 ? `${str.slice(0, 33)}…` : str, { fontFamily: FONT, fontSize: '14px', color: '#ffffff' });
     b.add([bg, ic, t1, t2]);
-    // Во время диалога (окно сверху) баннер выезжает под ним
-    const top = s.dialogue?.active ? 34 + (s.dialogue.box?.height || 156) + 12 : 12;
+    // Во время диалога (окно сверху) баннер выезжает под ним; иначе — под кнопками телефона и тетради
+    const top = s.dialogue?.active ? 34 + (s.dialogue.box?.height || 156) + 12 : 64;
     b.y = top - 82;
     b.setAlpha(1);
     // Вибрация: баннер дрожит
@@ -1385,6 +1387,9 @@ export function applySettings() {
   setVolumes({ music: st.music, sfx: st.sfx });
   voiceSettings.enabled = st.voice;
   voiceSettings.volume = st.voiceVol;
+  // Яркость — фильтром холста: одинаково в WebGL и Canvas, ничего не перерисовывая
+  const canvas = window.game?.canvas;
+  if (canvas) canvas.style.filter = st.brightness && st.brightness !== 1 ? `brightness(${st.brightness})` : '';
   phoneChanged();
 }
 

@@ -39,7 +39,7 @@ function defaults() {
     // Задания: id → { title, status: 'active'|'done'|'failed', note, giver }
     quests: {},
     // Настройки (громкость, озвучка, автотюн)
-    settings: { music: 0.8, sfx: 0.7, voice: true, voiceVol: 1.4, textSpeed: 22, autotune: 'off', headphones: true, graphics: 'high', phoneX: 640 },
+    settings: { music: 0.8, sfx: 0.7, voice: true, voiceVol: 1.4, textSpeed: 22, autotune: 'off', headphones: true, graphics: 'high', phoneX: 640, brightness: 1 },
   };
 }
 

@@ -435,12 +435,16 @@ export class LocationScene extends Phaser.Scene {
         this.player.setFlipX(dir < 0);
       });
     }
+    // Долго идёшь в одну сторону — Марк разгоняется (широкие дворы и улицы проходятся быстрее)
+    this.walkHeld = dir && !this.sneaking ? (this.walkHeld || 0) + dt : 0;
+    const boost = 1 + Math.min(0.4, Math.max(0, this.walkHeld - 900) / 1500);
     if (dir && !this.turning) {
-      const speed = (this.sneaking ? SNEAK_SPEED : SPEED) * walkFactor();
+      const speed = (this.sneaking ? SNEAK_SPEED : SPEED * boost) * walkFactor();
       this.player.x = Phaser.Math.Clamp(this.player.x + dir * speed * (dt / 1000), 40, this.cfg.width - 40);
       this.player.setFlipX(dir < 0);
       walk(this.player, this.sneaking);
-      this.stepTimer -= dt;
+      this.player.anims.timeScale = boost;
+      this.stepTimer -= dt * boost;
       if (this.stepTimer <= 0) {
         // Крадучись — шагов не слышно
         if (!this.sneaking) sfx(this.cfg.steps || 'stepWood');

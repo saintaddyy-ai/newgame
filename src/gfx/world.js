@@ -234,8 +234,9 @@ export function lightSprite(scene, s) {
     }
     return;
   }
-  // Окружающий свет: синеватый полумрак
-  const amb = mix(0xffffff, mix(env.tint, 0x8a8ab8, 0.5), Math.min(0.75, dark * 0.75));
+  // Окружающий свет: синеватый полумрак. Героя ночью не «гасим» до конца — в чёрном худи его иначе не видно
+  const cap = s === scene.player ? 0.5 : 0.65;
+  const amb = mix(0xffffff, mix(env.tint, 0x8a8ab8, 0.5), Math.min(cap, dark * 0.75));
   let best = 0;
   let bestC = 0xffffff;
   for (const L of env.lights) {
