@@ -22,7 +22,11 @@ export function startEpisode2() {
   if (F.markaInInventory && !hasItem('marka')) giveItem('marka');
   if (F.reyLeadgen || F.reyLeadgenHalf) giveItem('flyers');
   if (!hasItem('mic')) giveItem('mic');
-  if (F.reyDebt) state.debts.ray = { amount: 20000, due: 'через 2 недели' };
+  if (F.reyDebt) {
+    state.debts.ray = { amount: 20000, due: 'через 2 недели' };
+    quest('e2_debt', { title: 'Долг Рею — 20 000 ₽', note: 'Отдать, отработать или договориться. Рей у арки вечером', giver: 'ray', status: 'active', silent: true });
+  }
+  if (hasItem('flyers')) quest('e2_flyers', { title: 'Сто лидов: флаеры Рея', note: 'Раздать в очереди у «Подвала» и не попасться Бульдогу', giver: 'ray', status: 'active', silent: true });
   state.goal = 'Вечером — «Подвал». До семи — свободен';
   return { loc: 'apartment', spawnX: 200 };
 }

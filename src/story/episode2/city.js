@@ -235,14 +235,13 @@ export async function clothesTalk(ctx, w) {
 
 // ---------- Прохожие на улицах ----------
 
-export function streetPeople(scene, place, n = 3) {
-  const list = [];
-  for (let i = 0; i < n; i++) {
+// slots — свободные места между дверями, чтобы прохожий не загораживал вход
+export function streetPeople(scene, place, slots) {
+  return slots.map((x, i) => {
     const seed = `${place}_${day()}_${Math.floor(now() / 120)}_${i}`;
     const key = personTexture(scene, randomSpec(seed));
-    list.push({ id: `pass_${i}`, name: 'Прохожий', sprite: key, x: 500 + i * 640 + (seed.length % 5) * 40, flip: i % 2 === 0, label: 'Заговорить', talk: visitorTalk, cost: 5 });
-  }
-  return list;
+    return { id: `pass_${i}`, name: 'Прохожий', sprite: key, x, flip: i % 2 === 0, label: 'Заговорить', talk: visitorTalk, cost: 5 };
+  });
 }
 
 // Пролетают мимо, не останавливаются (атмосфера)

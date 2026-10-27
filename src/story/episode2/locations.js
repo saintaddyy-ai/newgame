@@ -246,7 +246,7 @@ const crossroads = {
   }),
   prepare: (scene) => {
     ['cop', 'vika'].forEach((id) => castKey(scene, id));
-    scene.__people = C.streetPeople(scene, 'crossroads', 2);
+    scene.__people = C.streetPeople(scene, 'crossroads', [560, 1300]);
   },
   setup: (scene) => C.ambientWalkers(scene, 2500, 3),
   lamps: () => [{ x: 286, y: 200, r: 120, cone: true }, { x: 1286, y: 200, r: 120, cone: true, flicker: true }, { x: 2186, y: 200, r: 120, cone: true }, { x: 1120, y: FLOOR - 170, r: 90, color: 0x3df0ff, alpha: 0.5 }],
@@ -300,7 +300,7 @@ const cafes = {
   }),
   prepare: (scene) => {
     castKey(scene, 'mira');
-    scene.__people = C.streetPeople(scene, 'cafes', 3);
+    scene.__people = C.streetPeople(scene, 'cafes', [760, 1350, 1800]);
   },
   setup: (scene) => C.ambientWalkers(scene, 2600, 3),
   lamps: () => [{ x: 236, y: 200, r: 120, cone: true }, { x: 1336, y: 200, r: 120, cone: true }, { x: 2336, y: 200, r: 120, cone: true, flicker: true }],
@@ -339,7 +339,7 @@ const shops = {
       { x: 2280, w: 300, h: 300, color: 0x3a2a2a, shop: true, sign: 'ЛОМБАРД 24', signColor: '#ff8a20' },
     ],
   }),
-  prepare: (scene) => (scene.__people = C.streetPeople(scene, 'shops', 3)),
+  prepare: (scene) => (scene.__people = C.streetPeople(scene, 'shops', [700, 1780, 2220])),
   setup: (scene) => C.ambientWalkers(scene, 2600, 3),
   lamps: () => [{ x: 686, y: 200, r: 120, cone: true }, { x: 1786, y: 200, r: 120, cone: true }],
   zones: () => (R.buyerChance() ? [{ id: `buyer_s_${Math.floor(now() / 30)}`, x1: 1100, x2: 1400, when: () => Math.random() < 0.5, run: R.buyerApproach }] : []),
@@ -400,8 +400,10 @@ function cafeLocation(id, title, spec, extraNpcs = () => [], extraItems = []) {
     prepare: (scene) => {
       prepareWorkers(scene, WORKERS[id]);
       ['mira', 'lola', 'olymp'].forEach((c) => castKey(scene, c));
-      scene.__visitors = C.visitorSpecs(id).map(({ seed, i }) => ({
-        id: `vis_${i}`, name: 'Посетитель', sprite: personTexture(scene, randomSpec(seed)), x: 700 + i * 150, flip: i % 2 === 0, label: 'Поговорить', talk: C.visitorTalk, cost: 5,
+      // Посетители — на свободных местах, не на Стасе, Мире, Лоле и Карине
+      const slots = { zerno: [650, 760, 1130], pyshka: [650, 800, 950, 1100], noch: [650, 760, 1000] }[id];
+      scene.__visitors = C.visitorSpecs(id).slice(0, slots.length).map(({ seed, i }) => ({
+        id: `vis_${i}`, name: 'Посетитель', sprite: personTexture(scene, randomSpec(seed)), x: slots[i], flip: i % 2 === 0, label: 'Поговорить', talk: C.visitorTalk, cost: 5,
       }));
     },
     async onEnter(ctx) {
@@ -638,7 +640,7 @@ const metro = {
   steps: 'stepTile',
   draw: (s) => drawMetro(s, 1900, station().line, station().name),
   prepare: (scene) => {
-    scene.__people = F.e2Station === 'serpukhovskaya' ? R.platformPeople(scene) : C.streetPeople(scene, `metro_${F.e2Station}`, 2);
+    scene.__people = F.e2Station === 'serpukhovskaya' ? R.platformPeople(scene) : C.streetPeople(scene, `metro_${F.e2Station}`, [600, 1250]);
   },
   lamps: () => [160, 500, 840, 1180, 1520, 1860].map((x) => ({ x, y: 34, r: 90, color: 0xfff0c8, alpha: 0.3 })),
   photoSpots: [{ id: 'e2_cover_metro', x: 900, range: 900, text: 'Платформа метро — кадр для обложки' }],
