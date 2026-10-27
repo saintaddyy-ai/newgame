@@ -3,10 +3,11 @@ import { voiced } from '../../voice.js';
 import { addContact } from '../../phone/model.js';
 import {
   F, state, hasItem, takeItem, giveItem, pulse, energy, now, at, day, addFollowers, feed, quest, questStatus, receive,
-  rel, relOf, once, pickOne,
+  rel, relOf, once, pickOne, clean,
 } from './common.js';
 import { mood, byMood, nextDay, isNight, studioOccupant, whereIs, initialPulse, pulseLevel } from './world.js';
 import { rayMenu } from './courier.js';
+import { danJingleOption, recordJingle, jingleDeadline } from './jingle.js';
 
 // ---------- Старт эпизода ----------
 
@@ -14,7 +15,14 @@ export function startEpisode2() {
   state.episode = 'ep2';
   state.time.day = 'fri';
   state.time.min = at(10);
+  // Марочка из Эпизода 1 давно отпустила — новая глава начинается трезвой
+  F.acidNow = false;
+  F.acidUntil = null;
   state.energy = 90;
+  // Утром мама накормила; помыться — на совести игрока
+  state.food = Math.max(state.food ?? 0, 70);
+  state.clean = Math.min(Math.max(state.clean ?? 0, 55), 70);
+  state.starve = 0;
   state.pulse = initialPulse();
   F.e2Seed = Math.floor(Math.random() * 1000);
   F.e2Started = true;
@@ -22,6 +30,12 @@ export function startEpisode2() {
   if (F.markaInInventory && !hasItem('marka')) giveItem('marka');
   if (F.reyLeadgen || F.reyLeadgenHalf) giveItem('flyers');
   if (!hasItem('mic')) giveItem('mic');
+  // Дела Эпизода 1 остаются в Эпизоде 1 (итоги главы уже показаны)
+  Object.keys(state.quests).filter((k) => k.startsWith('e1_')).forEach((k) => delete state.quests[k]);
+  // Контакты из Эпизода 1 (при «Сразу Эпизод 2» их ещё нет)
+  addContact('mom', { silent: true });
+  addContact('dan', { silent: true });
+  if (F.rayMet) addContact('ray', { silent: true });
   if (F.reyDebt) {
     state.debts.ray = { amount: 20000, due: 'через 2 недели' };
     quest('e2_debt', { title: 'Долг Рею — 20 000 ₽', note: 'Отдать, отработать или договориться. Рей у арки вечером', giver: 'ray', status: 'active', silent: true });
@@ -36,21 +50,25 @@ export function startEpisode2() {
 export const EVENTS = [
   // Аркаша ставит Марку соцсети
   { id: 'social', day: 'fri', at: at(10, 20), run: () => unlockSocial() },
-  { id: 'stas_msg', day: 'fri', at: at(12), run: () => receive('stas', 'Тень? Это Стас, звук «Подвала». Зайди в «Зерно» до 16, обсудим твой слот. Слот. Ладно, это Адам так говорит') },
+  { id: 'stas_msg', day: 'fri', at: at(12), run: () => receive('stas', 'Тень, это Стас, звук «Подвала». QuadroXZ. Зайди в «Зерно» до 16 — обсудим твой слот. Слот. Слот. Гад дем, Адам, выйди из моей головы') },
   { id: 'ray_msg', day: 'fri', at: at(16, 10), run: () => F.rayMet && receive('ray', 'братик я в шаурме. воронка горячая. заходи до подвала') },
-  { id: 'dan_call', day: 'fri', at: at(19), run: (scene) => !F.e2InPodval && scene.phone.ring('dan', danCallPodval) },
-  { id: 'dan_call2', day: 'fri', at: at(20, 30), run: (scene) => !F.e2InPodval && scene.phone.ring('dan', danCallLate) },
+  { id: 'dan_call', day: 'fri', at: at(19), run: (scene) => !F.e2InPodval && scene.phone.ring('dan', danCallPodval, { stale: () => !!F.e2InPodval || day() !== 'fri' }) },
+  { id: 'dan_call2', day: 'fri', at: at(20, 30), run: (scene) => !F.e2InPodval && scene.phone.ring('dan', danCallLate, { stale: () => !!F.e2InPodval || day() !== 'fri' }) },
   { id: 'podval_missed', day: 'fri', at: at(22), run: () => !F.e2InPodval && missPodval() },
   { id: 'vibe_sat', day: 'sat', at: at(10, 5), run: () => vibeAfterPodval() },
-  { id: 'palych', day: 'sat', at: at(10, 10), run: (scene) => !F.busted && scene.phone.ring('palych', palychCall) },
+  { id: 'palych', day: 'sat', at: at(10, 10), run: (scene) => !F.busted && scene.phone.ring('palych', palychCall, { stale: () => day() !== 'sat' || now() >= at(14) }) },
   { id: 'managers', day: 'sat', at: at(13), run: () => managerOffers() },
   { id: 'kira_cat', day: 'sat', at: at(12, 30), run: () => relOf('kira') >= 1 && receive('kira', 'Гамлет пропал. Мой кот. Чёрный, одно ухо порвано. Если увидишь во дворах — напиши. Пожалуйста.', { replies: [{ id: 'e2_cat_yes', text: 'Поищу' }, { id: 'e2_cat_no', text: 'Сорян, занят' }] }) },
   { id: 'mira_film', day: 'sat', at: at(11), run: () => relOf('mira') >= 1 && receive('mira', 'Привет. У меня плёнка с нашей школы, не проявленная. В «Проявке» на торговой сделают за пару часов. Заберёшь? Мне некогда, я на съёмке', { replies: [{ id: 'e2_film_yes', text: 'Заберу' }, { id: 'e2_film_no', text: 'Не успею' }] }) },
-  { id: 'stas_stream', day: 'sat', at: at(11, 30), run: () => receive('stas', 'Сегодня с 12 до 16 стрим из «Зерна». Хочешь вживую почитать? Почитать. Блин, опять Адам', { replies: [{ id: 'e2_stream_yes', text: 'Да, приду' }, { id: 'e2_stream_no', text: 'Не сегодня' }] }) },
+  { id: 'stas_stream', day: 'sat', at: at(11, 30), run: () => receive('stas', 'бро, сегодня с 12 до 16 стримлю из «Зерна». хочешь вживую почитать? три строчки, без чата. квадро в этой тсс…', { replies: [{ id: 'e2_stream_yes', text: 'Да, приду' }, { id: 'e2_stream_no', text: 'Не сегодня' }] }) },
   { id: 'arkasha_cover', day: 'sat', at: at(12), run: () => arkashaCoverOffer() },
   { id: 'granny_ticket', day: 'sun', at: at(10, 30), run: () => quest('e2_ticket', { title: 'Лишний билет на «Арену»', note: 'Баба Валя нашла у подъезда. Спроси у неё во дворе', giver: 'granny', status: 'active' }) },
   { id: 'mom_tap', day: 'sun', at: at(11), run: () => receive('mom', 'Марк, кран на кухне опять течёт. Найдёшь мастера? На торговой есть «Кран-Сервис»', { replies: [{ id: 'e2_tap_yes', text: 'Найду, мам' }, { id: 'e2_tap_no', text: 'Сам почини, я занят' }] }) },
   { id: 'kid_track', day: 'sun', at: at(12), run: () => quest('e2_kidtrack', { title: 'Трек про двор для пацана', note: 'Пацан ждёт во дворе. Записать у Дэна (строчки про улицу)', giver: 'kid', status: 'active' }) },
+  { id: 'jingle_late', day: 'sun', at: at(20), run: () => jingleDeadline() },
+  // Дела со сроком: не успел — провал (а не «активно» навсегда)
+  { id: 'palych_late', day: 'sat', at: at(14), run: () => questStatus('e2_palych') === 'active' && !F.e2PalychDone && quest('e2_palych', { status: 'failed', title: 'Подработка у Палыча: опоздал' }) },
+  { id: 'stream_late', day: 'sat', at: at(16), run: () => questStatus('e2_stream') === 'active' && !F.e2StreamDone && quest('e2_stream', { status: 'failed', title: 'Стрим у Стаса: не пришёл' }) },
   { id: 'clip', day: 'sun', at: at(20), run: (scene) => clipRelease(scene) },
 ];
 
@@ -172,7 +190,13 @@ export async function sleepHere(ctx, place = 'home') {
     const c = await d.choose(['Поспать пару часов (+энергия)', 'Нет']);
     if (c === 1) return;
     energy(35);
+    d.close();
+    await ctx.lieDown();
+    F.nd_asleep = true;
     ctx.time(120);
+    F.nd_asleep = false;
+    ctx.standUp();
+    ctx.scene.cameras.main.flash(500, 7, 6, 13);
     return d.think('Проваливаюсь в сон. Просыпаюсь через два часа — будто через неделю.');
   }
   if (day() === 'sun') return endSunday(ctx, place);
@@ -181,8 +205,11 @@ export async function sleepHere(ctx, place = 'home') {
   F.e2SleptAt = place;
   if (place === 'home' && !momIsHome()) F.e2MomAlone = false;
   if (place !== 'home') F.e2NightsOut = (F.e2NightsOut || 0) + 1;
+  // Ночь не дома — на диване в гараже или где придётся: помятый
+  if (place !== 'home') clean(-8);
   await d.think(pickOne(['Потолок. Строчки. Потолок.', 'Засыпаю под гул холодильника.', 'Город за окном шумит, как бит, который ещё не записан.']));
   d.close();
+  await ctx.lieDown();
   state.energy = place === 'home' ? 100 : 80;
   nextDay();
   F.acidNow = false;
@@ -199,9 +226,10 @@ export async function passOut(scene) {
   F.e2SleptAt = scene.locKey === 'garage' ? 'garage' : scene.locKey === 'apartment' ? 'home' : 'party';
   if (F.e2SleptAt === 'party' && scene.locKey !== 'ray_party') F.e2SleptAt = 'street';
   state.energy = 45;
-  if (day() === 'sun') return endSunday(ctx, F.e2SleptAt);
+  if (day() === 'sun') return endSunday(ctx, F.e2SleptAt, { forced: true });
   nextDay();
   state.time.min = at(11, 30);
+  if (F.e2SleptAt !== 'home') clean(F.e2SleptAt === 'street' ? -15 : -8);
   if (F.e2SleptAt === 'street') {
     rel('mom', -1);
     pulse(-3);
@@ -248,7 +276,8 @@ export async function momTalk2(ctx) {
   const c = await d.choose(opts.map((o) => o[1]));
   const pick = opts[c][0];
   if (pick === 'eat') {
-    energy(25);
+    if (state.food >= 90) return d.say('Мама', 'Ты же только что ел! Иди уж, растолстеешь — на сцену не влезешь.');
+    await ctx.eat(45, { ms: 1600, energy: 25 });
     ctx.time(20);
     await d.think('Гречка с котлетой. Мир сразу становится чуть терпимее.');
   } else if (pick === 'father') {
@@ -287,6 +316,8 @@ export async function danTalk2(ctx) {
   if (!occ) opts.push(['record', 'Записать трек (1 час)']);
   if (!F.manager && F.e2ManagerOffers) opts.push(['manager', '«Будешь моим менеджером?»']);
   if (questStatus('e2_kidtrack') === 'active') opts.push(['kid', '«Пацану обещал трек про двор.»']);
+  const jingle = danJingleOption();
+  if (jingle) opts.push(jingle);
   if (isNight() && once(`dan_talk_${day()}`)) opts.push(['night', '«Не спится?»']);
   opts.push(['bye', '«Потом.»']);
   const c = await d.choose(opts.map((o) => o[1]));
@@ -298,6 +329,7 @@ export async function danTalk2(ctx) {
     d.close();
     return start('Studio', { mode: 'track', title: pick === 'kid' ? 'Наш двор' : null, back: { loc: 'garage', spawnX: 780 } });
   }
+  if (pick === 'jingle') return recordJingle(ctx);
   if (pick === 'manager') return managerDan(ctx);
   if (pick === 'night') {
     await d.say('Дэн', 'Как думаешь, если нас никто не услышит — это считается, что мы были?');
@@ -547,10 +579,10 @@ export async function kidTalk2(ctx) {
 
 export async function rayTalk2(ctx, where) {
   const { d } = ctx;
-  if (F.busted) return d.say('Рей', 'Братик? Какой братик? Я тебя не знаю. Мы не знакомы. Рей в этой малашечке — один.');
+  if (F.busted) return d.say('Рей', 'Братик? Какой братик? Я тебя не знаю. Мы не знакомы. Рей в этой малышечке — один.');
   if (F.quitRay && !F.e2RayForgave) return d.say('Рей', 'А, бывший лид. Проходи, проходи. Не задерживайся в моей воронке.');
   const m = mood('ray');
-  await d.say('Рей', m >= 1 ? 'БРАТИК! Иди сюда! Проверка на звонкость!' : m <= -1 ? 'А… это ты. Пайка. Рей сегодня отходит. Не дыши громко.' : 'О, Тень. Рей в этой малашечке. Как воронка?');
+  await d.say('Рей', m >= 1 ? 'БРАТИК! Иди сюда! Проверка на звонкость!' : m <= -1 ? 'А… это ты. Пайка. Рей сегодня отходит. Не дыши громко.' : 'О, Тень. Рей в этой малышечке. Как воронка?');
   if (m >= 1) {
     ctx.sfx('thump');
     ctx.fx.shake(150, 0.008);
@@ -596,7 +628,7 @@ function vibeAfterPodval() {
     feed('подвал_официальный', 'Не у всех получается с первого раза. Тень, ждём ещё.');
   }
   if (p === 'bottom') feed('anon_district', 'говорят, Тень с Реем барыжит. ну-ну');
-  if (p === 'rise') feed('QuadroXZ', 'Звук в его куске — 0 дБ лишнего. Чистый. Респект. Респект — 100%.');
+  if (p === 'rise') feed('QuadroXZ', 'в его куске ноль лишних дБ. чисто. гад дем, респект. квадро в этой тсс…');
   if (F.featRay) feed('RAY', 'Тень теперь в воронке. официально');
 }
 
@@ -652,10 +684,13 @@ async function clipRelease(scene) {
   scene.ctx.goal('Вечер воскресенья. Лечь спать дома — закончить главу');
 }
 
-export async function endSunday(ctx, place) {
+// forced — Марк вырубился в 4 утра: «Ещё не всё» уже не предлагаем
+export async function endSunday(ctx, place, { forced = false } = {}) {
   const { d } = ctx;
-  const c = await d.choose(['Закончить выходные (итоги главы)', 'Ещё не всё']);
-  if (c === 1) return;
+  if (!forced) {
+    const c = await d.choose(['Закончить выходные (итоги главы)', 'Ещё не всё']);
+    if (c === 1) return;
+  }
   F.e2SundayAt = place;
   await d.think('Выходные кончились. Пятница, суббота, воскресенье — а будто год.');
   if (place === 'home') await d.think('За стенкой мама смотрит сериал. Тихо смеётся. Давно я этого не слышал.');

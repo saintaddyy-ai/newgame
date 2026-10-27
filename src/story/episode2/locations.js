@@ -2,10 +2,12 @@
 // интерьеры (шаурма, барбер, тату, одежда, три кафе, «Проявка», «Кран-Сервис», ломбард),
 // метро, «Подвал», афтепати, крыши, клуб, ночной порт, промзона, «Речная», «Арена».
 import { drawApartment, drawYard, drawGarage, drawPawnshop, drawWarehouse } from '../backdrops.js';
-import { drawStreet, drawInterior, drawMetro, drawRooftop, drawPort, drawPromzona, drawRechnaya, metroEntrance, neon, isDarkNow, trainArrive } from './scenery.js';
+import { drawStreet, drawInterior, drawMetro, drawRooftop, drawPort, drawPromzona, drawRechnaya, isDarkNow, trainArrive } from './scenery.js';
 import { F, state, hasItem, now, at, day, exit, once, pickOne, quest, questStatus } from './common.js';
 import { isAt, whereIs, studioOccupant, isNight } from './world.js';
 import { castKey, personTexture, randomSpec } from './people.js';
+import { addActor } from '../../gfx/actors.js';
+import { paintCourtyards } from '../../gfx/places/misc.js';
 import { WORKERS, onShift, prepareWorkers } from './workers.js';
 import * as M from './main.js';
 import * as P from './podval.js';
@@ -13,6 +15,7 @@ import * as G from './girls.js';
 import * as C from './city.js';
 import * as S from './side.js';
 import * as R from './courier.js';
+import * as J from './jingle.js';
 import { STATIONS, station, chooseStation, metroOpen } from './metro.js';
 
 const FLOOR = 470;
@@ -55,11 +58,17 @@ const apartment = {
     { x: 480, label: 'Окно', sfx: 'whoosh', async use({ d }) {
       await d.think(isNight() ? 'Ночь. Три окна в доме напротив. В одном кто-то тоже не спит.' : day() === 'sun' ? 'Воскресенье. Даже голуби ходят медленнее.' : 'Город. Где-то там — «Подвал», Рей, кафе, люди. Все чего-то хотят.');
     } },
-    { x: 872, label: 'Холодильник', sfx: 'fridge', cost: 15, async use({ d, fx }) {
+    { x: 872, label: 'Холодильник', sfx: 'fridge', cost: 15, async use(ctx) {
+      const { d, fx } = ctx;
       fx.flash(872, 380, 84, 180, 0xbfe8ff, 0.7, 900);
       if (once(`fridge_${day()}`)) {
-        state.energy = Math.min(100, state.energy + 15);
-        return d.think('Гречка, котлета, мамин компот. Съел стоя, как в детстве.');
+        await d.think('Гречка, котлета, мамин компот.');
+        await ctx.eat(40, { energy: 15 });
+        return d.think('Съел стоя, как в детстве.');
+      }
+      if (state.food < 50 && once(`fridge2_${day()}`)) {
+        await d.think('В глубине — банка огурцов и полбатона. Сойдёт.');
+        return ctx.eat(15);
       }
       return d.think('Пусто. Я всё съел. Холодильник гудит с укором.');
     } },
@@ -110,7 +119,7 @@ const yard = {
     { x: 2017, y: 440, r: 120, color: 0xffd27a },
     { x: 2515, y: 212, r: 120, color: 0xffe0a0, cone: true },
   ],
-  critters: () => (isNight() ? [{ type: 'cat', x: 1700, y: 244, depth: 4 }] : [{ type: 'pigeons', x: 1180, n: 5 }, { type: 'cat', x: 1700, y: 244, depth: 4 }]),
+  critters: () => (isNight() ? [{ type: 'cat', x: 1700, y: 266, depth: 4 }] : [{ type: 'pigeons', x: 1180, n: 5 }, { type: 'cat', x: 1700, y: 266, depth: 4 }]),
   photoSpots: [
     { id: 'e2_cover_graffiti', x: 1400, text: 'Граффити «ТЕНЬ» — кадр для обложки' },
     { id: 'e2_swings', x: 760, line: { id: 'e2_photo_swings', text: 'Качели во дворе скрипят, как старая пластинка', tag: 'street' } },
@@ -154,8 +163,10 @@ const garage = {
   lamps: [{ x: 720, y: 72, r: 150, color: 0xffe8a8, alpha: 0.4 }, { x: 730, y: 371, r: 50, color: 0x3df0ff, alpha: 0.35 }],
   doors: [{ id: 'gate', x: 69, w: 122, h: 228, metal: true, color: 0x4a505c }],
   async onEnter(ctx) {
-    if (F.e2SleptAt === 'garage' && !F[`e2Morning_${day()}`]) return M.morning(ctx);
+    // Утро в гараже — только после ночи (в пятницу ночная запись с Дэном ещё не утро)
+    if (day() !== 'fri' && F.e2SleptAt === 'garage' && !F[`e2Morning_${day()}`]) return M.morning(ctx);
     if (F.e2Night === 'dan' && !F.e2DanNightTrack && day() === 'fri') return danNightTrack(ctx);
+    if (await J.afterJingle(ctx)) return;
     if (F.e2KidRecording && state.flags.lastTrack && !F.e2KidTrackDone) {
       F.e2KidTrackDone = true;
       return ctx.d.say('Дэн', 'Трек про двор готов. Беги к пацану, пусть снимает.');
@@ -209,6 +220,13 @@ const garage_wc = {
   lamps: [{ x: 300, y: 72, r: 110, color: 0xffe8a8, alpha: 0.4 }],
   items: [
     { x: 380, label: 'Унитаз и стены', sfx: 'flush', cost: 10, use: M.garageWc },
+    { x: 150, label: 'Раковина — помыться', sfx: 'water', pose: 'wash', cost: 20, async use(ctx) {
+      const { d } = ctx;
+      if (state.clean >= 90) return d.think('Я и так чистый. Почти скриплю.');
+      await d.think('Ледяная вода, кусок хозяйственного мыла и полотенце с надписью «ДЭН. НЕ ТРОГАТЬ».');
+      await ctx.wash(45, { full: false });
+      return d.think(state.clean >= 70 ? 'Жить можно. Пахну гаражом, но уже чистым гаражом.' : 'Лучше, чем было. До душа далеко.');
+    } },
     { x: 60, label: 'Обратно в гараж', sfx: 'click', async use({ go }) {
       go('garage', 370);
     } },
@@ -231,18 +249,17 @@ const crossroads = {
       { x: 220, w: 320, h: 330, color: 0x3a2e48, shop: true, sign: 'ОПАСНАЯ БРИТВА', signColor: '#ff3d8a' },
       { x: 560, w: 380, h: 300, color: 0x2e3a48, shop: true, sign: 'ШАУРМА 24', signColor: '#ffd166', awning: 0xc0303a },
       { x: 960, w: 320, h: 360, color: 0x2a2236 },
-      { x: 1700, w: 380, h: 320, color: 0x3a3440 },
+      { x: 1580, w: 360, h: 320, color: 0x3a3440, shop: true, sign: 'ПРОДУКТЫ', signColor: '#8ae6a0' },
       { x: 2100, w: 400, h: 340, color: 0x2e2a40 },
     ],
-    extras: (scene, g) => {
-      // «Подвал»: лестница вниз и неон
-      g.fillStyle(0x07060d, 1).fillRect(1060, FLOOR - 120, 120, 110);
-      for (let i = 0; i < 5; i++) g.fillStyle(0x3a3a44, 1).fillRect(1060, FLOOR - 120 + 24 + i * 18, 120, 4);
-      neon(scene, 1120, FLOOR - 170, 'ПОДВАЛ', '#3df0ff', 16);
-      metroEntrance(scene, g, 1500);
-      neon(scene, 1900, FLOOR - 220, '← КАФЕ-КВАРТАЛ →', '#ffd166', 9);
-      neon(scene, 2300, FLOOR - 230, 'ТОРГОВАЯ →', '#8ae6a0', 9);
-    },
+    features: [
+      { type: 'arch', x: 100 },
+      { type: 'podval', x: 1120 },
+      { type: 'metro', x: 1500 },
+      { type: 'neon', x: 1900, y: 236, text: '← КАФЕ-КВАРТАЛ →', color: '#ffd166' },
+      { type: 'neon', x: 2300, y: 236, text: 'ТОРГОВАЯ →', color: '#8ae6a0' },
+    ],
+    parked: [[2180, 0xd8d8d8, -1]],
   }),
   prepare: (scene) => {
     ['cop', 'vika'].forEach((id) => castKey(scene, id));
@@ -263,6 +280,7 @@ const crossroads = {
     exit(100, 'Во двор (арка)', 'yard', 2515, { cost: 5, facing: 'left' }),
     exit(380, '«Опасная бритва»', 'barber', 900, { cost: 2, open: () => now() >= at(10) && now() < at(21) }),
     exit(760, '«Шаурма 24»', 'shawarma', 980, { cost: 2 }),
+    { x: 1760, label: '«Продукты 24»', sfx: 'click', cost: 5, use: groceries },
     { x: 1120, label: () => (P.podvalOpen() || (day() === 'fri' && now() >= at(18))) ? 'Вниз — в «Подвал»' : '«Подвал»', sfx: 'click', async use(ctx) {
       ctx.time(2);
       ctx.go('podval_entrance', 200);
@@ -277,6 +295,22 @@ const crossroads = {
     exit(2300, 'Торговая улица', 'shops', 120, { cost: 5 }),
   ],
 };
+
+// Магазин «Продукты 24»: дёшево и сытно (покупки — через ctx.cash)
+const GROCERY = [['Батон и кефир', 120, 30], ['Доширак (кипяток у кассы)', 90, 25], ['Сырок и банан', 70, 12]];
+
+async function groceries(ctx) {
+  const { d } = ctx;
+  await d.say('Продавщица', pickOne(['Пакет нужен? Пакет — пять рублей.', 'Молодой человек, вы брать будете или смотреть?', 'Кефир свежий, вчерашний. Это свежий.']));
+  const c = await d.choose([...GROCERY.map(([n, p]) => `${n} — ${p} ₽`), '«Ничего, спасибо.»']);
+  if (c === GROCERY.length) return;
+  const [name, price, fill] = GROCERY[c];
+  if (state.cash < price) return d.say('Продавщица', 'Не хватает. Положите обратно, я не банк.');
+  ctx.cash(-price, name);
+  await ctx.eat(fill, { energy: 8 });
+  ctx.time(10);
+  return d.think(pickOne(['Ем прямо у входа. Голуби смотрят с завистью.', 'Дёшево и сердито. Как мой первый бит.', 'Студенческий ужин чемпиона.']));
+}
 
 // ---------- Кафе-квартал ----------
 
@@ -296,7 +330,8 @@ const cafes = {
       { x: 1460, w: 380, h: 360, color: 0x1e1a2a, shop: true, sign: 'НОЧЬ', signColor: '#c77dff' },
       { x: 2000, w: 500, h: 300, color: 0x2e3440 },
     ],
-    extras: (scene) => neon(scene, 2250, FLOOR - 220, 'ДВОРЫ →', '#c9c4ee', 9),
+    features: [{ type: 'neon', x: 2250, y: 236, text: 'ДВОРЫ →', color: '#c9c4ee' }],
+    parked: [[2150, 0x8a3a2a, -1]],
   }),
   prepare: (scene) => {
     castKey(scene, 'mira');
@@ -366,11 +401,7 @@ const courtyards = {
   ambience: 'night',
   steps: 'stepWet',
   night: () => (isDarkNow() ? 0.4 : 0.1),
-  draw: (s) => drawInterior(s, 1800, {
-    wall: 'brick', wallColor: 0x3a2e2e, floor: 0x2b2b33,
-    props: [{ type: 'window', x: 200, y: 100 }, { type: 'window', x: 900, y: 120 }, { type: 'window', x: 1500, y: 90 },
-      { type: 'scribbles', x: 560, y: 180, lines: ['САМИЗДАТ', 'тишина — тоже бит'] }, { type: 'plant', x: 1200 }],
-  }),
+  draw: (s) => paintCourtyards(s, 1800),
   critters: () => (questStatus('e2_cat') === 'active' && !F.e2CatFound ? [] : [{ type: 'pigeons', x: 700, n: 3 }]),
   photoSpots: [{ id: 'e2_samizdat_wall', x: 600, line: { id: 'e2_photo_samizdat', text: 'На стене во дворе: «тишина — тоже бит»', tag: 'street' } }],
   async onEnter(ctx) {
@@ -408,6 +439,8 @@ function cafeLocation(id, title, spec, extraNpcs = () => [], extraItems = []) {
     },
     async onEnter(ctx) {
       F.e2WcFrom = id;
+      // После стрима — итоги сразу, даже если Стас уже ушёл
+      if (id === 'zerno' && (await S.streamAftermath(ctx))) return;
       // Драка посетителей — раз в день, не во всех кафе
       if (id !== 'zerno' && once(`fight_${id}_${day()}`) && Math.random() < 0.45) return C.cafeFight(ctx);
     },
@@ -461,8 +494,10 @@ const cafe_wc = {
   }),
   lamps: [{ x: 400, y: 52, r: 120, color: 0xfff0c8, alpha: 0.35 }],
   items: [
-    { x: 250, label: 'Зеркало', sfx: 'mirror', async use({ d }) {
-      await d.think(pickOne(['Умываю лицо. Холодная вода — лучший продюсер.', 'Под глазами синяки. Это образ. Это не образ.']));
+    { x: 250, label: 'Зеркало и раковина', sfx: 'mirror', async use(ctx) {
+      await ctx.d.think(pickOne(['Умываю лицо. Холодная вода — лучший продюсер.', 'Под глазами синяки. Это образ. Это не образ.']));
+      // Умыться в кафе — чуть-чуть свежее (до душа не дотянет)
+      if (state.clean < 50 && once(`cafe_wash_${day()}_${Math.floor(now() / 120)}`)) await ctx.wash(10, { full: false });
     } },
     { x: 560, label: 'Кабинка', sfx: 'flush', cost: 5, use: C.cafeWc },
     { x: 60, label: 'Выйти', sfx: 'doorSoft', async use({ go }) {
@@ -487,7 +522,7 @@ const shawarma = {
   npcs: () => [
     { id: 'timur', name: 'Тимур', sprite: cast('timur'), x: 260, talk: timurTalk },
     { id: 'kira', name: 'Кира', sprite: cast('kira'), x: 520, flip: true, dynamic: true, when: () => isAt('kira', 'shawarma'), talk: G.kiraTalk },
-    { id: 'ray', name: 'Рей', sprite: 'ray', x: 420, flip: true, dy: -110, dynamic: true, when: () => isAt('ray', 'shawarma') && !F.busted, talk: (ctx) => M.rayTalk2(ctx, 'shawarma') },
+    { id: 'ray', name: 'Рей', sprite: 'ray', x: 420, flip: true, dy: -60, pose: 'sit', depth: 9, dynamic: true, when: () => isAt('ray', 'shawarma') && !F.busted, talk: (ctx) => M.rayTalk2(ctx, 'shawarma') },
   ],
   items: [exit(1040, 'Выйти на улицу', 'crossroads', 760, { cost: 2, facing: 'left' })],
 };
@@ -499,6 +534,19 @@ async function timurTalk(ctx) {
     return d.say('Рей', 'Тимур, братик, лаваш — это верх воронки, мясо — середина, соус — конверсия! Это же очевидно!');
   }
   await d.say('Тимур', pickOne(['Шаурма — это как жизнь. Главное — соус.', 'Кира хорошая. Странная, но хорошая. Котов кормит.', 'Ночью тут все честные. Днём — все спешат.']));
+  // Задание 13: джингл (предложить / сдать)
+  const jingle = J.timurJingleOption();
+  const opts = [...(jingle ? [jingle] : []), ['eat', 'Шаурму — 250 ₽'], ['xl', 'Шаурму XL с двойным мясом — 380 ₽'], ['bye', '«Просто зашёл.»']];
+  const pick = opts[await d.choose(opts.map((o) => o[1]))][0];
+  if (pick === 'bye') return;
+  if (jingle && pick === jingle[0]) return J.timurJingle(ctx, pick);
+  const c = pick === 'eat' ? 0 : 1;
+  const price = c === 0 ? 250 : 380;
+  if (state.cash < price) return d.say('Тимур', 'Не хватает, брат. В долг не кручу. Даже тебе.');
+  ctx.cash(-price, c === 0 ? 'шаурма' : 'шаурма XL');
+  await ctx.eat(c === 0 ? 50 : 75, { ms: 1600, energy: c === 0 ? 20 : 30 });
+  ctx.time(20);
+  return d.think(c === 0 ? 'Горячо, остро, жирно. Ровно то, что надо.' : 'Двойное мясо. Я теперь тоже воронка. Сытая воронка.');
 }
 
 // «Шаурма» ночью: ступеньки у входа (выбор ночи — Кира)
@@ -657,12 +705,20 @@ const metro = {
       ctx.go(st.exit[0], st.exit[1]);
     } },
     { x: 900, label: 'Схема метро — поехать', sfx: 'page', async use(ctx) {
-      if (!metroOpen()) return ctx.d.think('Последний поезд ушёл. Табло пустое.');
+      if (!metroOpen()) {
+        // Застрять на платформе нельзя: можно дождаться первого поезда (часы идут, и Марк засыпает на лавке)
+        await ctx.d.think('Последний поезд ушёл. Табло пустое.');
+        const c = await ctx.d.choose(['[Сесть на лавку и ждать первый поезд]', '[Не сейчас]']);
+        if (c === 1) return;
+        await ctx.d.think('Лавка холодная. Эскалатор стоит. Где-то капает вода — почти бит.');
+        return ctx.time(Math.max(10, at(28) - now()));
+      }
       const id = await chooseStation(ctx);
       if (!id) return;
       ctx.sfx('subway');
       ctx.d.close();
       await trainArrive(ctx.scene, 1900, station().line, { leave: false });
+      await ctx.ride();
       ctx.time(20);
       F.e2Station = id;
       await ctx.card(`СТ. «${STATIONS[id].name.toUpperCase()}»`, '20 минут в вагоне');
@@ -697,12 +753,7 @@ const podval_entrance = {
     seed: 61,
     lamps: [500],
     buildings: [{ x: 0, w: 1400, h: 360, color: 0x2a2236 }],
-    extras: (scene, g) => {
-      g.fillStyle(0x07060d, 1).fillRect(940, FLOOR - 150, 140, 140);
-      for (let i = 0; i < 6; i++) g.fillStyle(0x3a3a44, 1).fillRect(940, FLOOR - 150 + 30 + i * 18, 140, 4);
-      neon(scene, 1010, FLOOR - 200, 'ПОДВАЛ', '#3df0ff', 20);
-      if (day() === 'fri') scene.add.image(760, 300, 'poster_openmic').setDisplaySize(70, 91);
-    },
+    features: [{ type: 'podval', x: 1010 }, ...(day() === 'fri' ? [{ type: 'posterImg', key: 'poster_openmic', x: 760, y: 330, w: 52, h: 68, angle: 2 }] : [])],
   }),
   prepare: (scene) => {
     ['bulldog', 'mira'].forEach((id) => castKey(scene, id));
@@ -749,10 +800,12 @@ const podval = {
   night: 0.25,
   draw: (s) => {
     drawInterior(s, 1600, { wall: 'brick', wallColor: 0x3a1a20, floor: 0x15121f, props: podvalProps });
-    // Толпа силуэтами у сцены
-    for (let x = 520; x < 1300; x += 34) {
-      const c = s.add.ellipse(x + Math.random() * 10, 470, 30, 60, 0x0c0a12).setOrigin(0.5, 1).setDepth(15).setAlpha(0.9);
-      s.tweens.add({ targets: c, y: c.y - 6, duration: 360, yoyo: true, repeat: -1, delay: Math.random() * 400 });
+    // Толпа у сцены: живые люди в полумраке, качаются под бит
+    for (let x = 560, i = 0; x < 1300; x += 46 + (i % 3) * 8, i++) {
+      const key = personTexture(s, randomSpec(`crowd_${i}`), null, 'crowd');
+      const c = addActor(s, x + Math.random() * 10, 478 + (i % 2) * 6, key, { depth: 15 + (i % 2), flip: Math.random() < 0.3, scale: 1.02 }).setTint(0x4a3a5a);
+      c.__noLight = true;
+      s.tweens.add({ targets: c, y: c.y - 5, duration: 366, yoyo: true, repeat: -1, delay: Math.random() * 360 });
     }
   },
   lamps: [{ x: 910, y: 120, r: 200, color: 0xff3d8a, alpha: 0.4 }, { x: 760, y: 60, r: 120, color: 0x3df0ff, alpha: 0.4 }, { x: 1060, y: 60, r: 120, color: 0xffd166, alpha: 0.4 }],
@@ -822,7 +875,7 @@ const ray_party = {
     scene.__crowd = Array.from({ length: 4 }, (_, i) => ({ id: `guest_${i}`, name: 'Гость', sprite: personTexture(scene, randomSpec(`party_${i}`)), x: 420 + i * 200, flip: i % 2 === 0, label: 'Поговорить', talk: C.visitorTalk, cost: 5 }));
   },
   async onEnter(ctx) {
-    if (F.e2SleptAt === 'party' && !F[`e2Morning_${day()}`]) return M.morning(ctx);
+    if (day() !== 'fri' && F.e2SleptAt === 'party' && !F[`e2Morning_${day()}`]) return M.morning(ctx);
     if (day() === 'fri' && F.e2Night === 'ray') return G.rayParty(ctx);
   },
   npcs: (scene) => [
@@ -919,13 +972,7 @@ const rechnaya = {
   ambience: 'street',
   steps: 'stepConcrete',
   night: () => (isDarkNow() ? 0.35 : 0),
-  draw: (s) => {
-    drawRechnaya(s, 2000);
-    const g = s.add.graphics();
-    g.fillStyle(0x2a2a30, 1).fillRect(1500, 300, 200, 170);
-    g.fillStyle(0x07060d, 1).fillRect(1560, 360, 80, 110);
-    neon(s, 1600, 330, 'САМИЗДАТ', '#8ae6a0', 10);
-  },
+  draw: (s) => drawRechnaya(s, 2000),
   npcs: () => [{ id: 'adam', name: 'Адам', sprite: 'adam', x: 1400, flip: true, dynamic: true, when: () => isAt('adam', 'rechnaya'), talk: S.adamRechnaya }],
   photoSpots: [{ id: 'e2_river', x: 900, range: 600, text: 'Река тёмная и медленная — как бит на 70 BPM' }],
   items: [
@@ -948,11 +995,7 @@ const arena = {
     seed: 81,
     lamps: [400, 1400],
     buildings: [{ x: 300, w: 1300, h: 420, color: 0x2a2a3a }],
-    extras: (scene, g) => {
-      g.fillStyle(0x3a3a4a, 1).fillRect(300, 60, 1300, 30);
-      neon(scene, 950, 140, 'АРЕНА · 20 000 МЕСТ', '#ffd166', 18);
-      scene.add.image(700, 300, 'poster_arena').setDisplaySize(120, 170);
-    },
+    features: [{ type: 'neon', x: 950, y: 150, text: 'АРЕНА · 20 000 МЕСТ', color: '#ffd166', size: 18 }, { type: 'posterImg', key: 'poster_arena', x: 700, y: 330, w: 60, h: 86 }],
   }),
   prepare: prepCast(['olymp']),
   photoSpots: [{ id: 'e2_arena', x: 950, range: 600, line: { id: 'e2_photo_arena', text: 'Сфоткался у «Арены». Однажды — изнутри', tag: 'dream' } }],

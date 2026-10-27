@@ -2,8 +2,10 @@
 // Ночные сцены, свидания (одно в день), знакомство с мамой со случайной реакцией, ночной город.
 import { voiced } from '../../voice.js';
 import { addContact } from '../../phone/model.js';
-import { F, state, pulse, energy, now, at, day, addFollowers, feed, quest, questStatus, rel, relOf, once, weighted, hasItem, takeItem } from './common.js';
+import { F, state, pulse, energy, now, at, day, addFollowers, faceFollowers, feed, quest, questStatus, rel, relOf, once, weighted, hasItem, takeItem } from './common.js';
 import { mood } from './world.js';
+import { addActor } from '../../gfx/actors.js';
+import { castKey } from './people.js';
 
 const canDate = () => (F.e2Dates || 0) < 1;
 
@@ -45,7 +47,7 @@ export async function kiraTalk(ctx) {
   if (pick === 'eat') {
     if (state.cash < 250) return d.think('Денег нет. Даже на трупик.');
     ctx.cash(-250, 'шаурма');
-    energy(30);
+    await ctx.eat(50, { ms: 1600, energy: 30 });
     ctx.time(20);
     return d.think('Горячо, остро, жирно. Ровно то, что надо.');
   }
@@ -78,6 +80,7 @@ export async function kiraSteps(ctx) {
   await d.say('Кира', 'Всё. Мне сдавать кассу. Иди спать, призрак.');
   ctx.goal('Домой — спать');
   F.e2SleptAt = 'home';
+  F.dateWith = null; // свидание кончилось — девушка больше не ждёт там
 }
 
 async function kiraDate(ctx) {
@@ -203,7 +206,7 @@ export async function miraRooftop(ctx) {
   } else if (c === 1) {
     rel('mira', 1);
     sfx('shutter');
-    addFollowers('kadr', 40, 'фото Миры с крыши');
+    faceFollowers('kadr', 40, 'фото Миры с крыши');
     await d.say('Мира', 'Стой. Не позируй. Просто смотри на город. Вот. Это ты.');
   } else if (relOf('mira') >= 2) {
     rel('mira', 2);
@@ -219,6 +222,7 @@ export async function miraRooftop(ctx) {
   ctx.time(120);
   ctx.goal('Домой — спать');
   F.e2SleptAt = 'home';
+  F.dateWith = null; // свидание кончилось — девушка больше не ждёт там
 }
 
 async function miraDate(ctx) {
@@ -338,7 +342,7 @@ export async function girlArrives(ctx) {
   const name = names[girl];
   sfx('door');
   await d.think(`Звонок в дверь. На пороге — ${name}.`);
-  const g = scene.add.sprite(1800, 470, `cast_${girl}_0`).setOrigin(0.5, 1).setDepth(11);
+  const g = addActor(scene, 1800, 470, castKey(scene, girl), { depth: 11 });
   await ctx.walk(g, 1300, 120);
   // Реакция мамы: веса по характеру девушки, настроению мамы, времени, тому, что она знает, и «Пульсу»
   const w = { warm: 1, awkward: 1, cold: 1, scandal: 0.3 };

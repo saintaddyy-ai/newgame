@@ -2,6 +2,9 @@ import Phaser from 'phaser';
 import { state, TAGS } from '../state.js';
 import { BEAT, audioCtx, loadBuffer, playBuffer, sfx } from '../audio.js';
 import { karaokeTimeline } from '../demos.js';
+import { addActor, play as actorPlay } from '../gfx/actors.js';
+import { ART } from '../gfx/pix.js';
+import { paintStageBack, crowdBackTextures } from '../gfx/places/scenes.js';
 
 const FONT = '"PT Mono", monospace';
 const PIXEL = '"Press Start 2P"';
@@ -17,6 +20,11 @@ export class StageScene extends Phaser.Scene {
   }
 
   create(data = {}) {
+    // Phaser переиспользует объект сцены: флаги прошлого концерта сбрасываем (иначе второй выход зависает)
+    this.leaving = false;
+    this.qte = null;
+    this.paused = false;
+    this.choiceCb = null;
     this.mode = data.mode || 'podval';
     this.back = data.back || { loc: 'podval', spawnX: 800 };
     this.F = state.flags;
@@ -27,7 +35,7 @@ export class StageScene extends Phaser.Scene {
     this.events.once('shutdown', () => this.cleanup());
     this.drawStage();
     this.input.keyboard.on('keydown', (ev) => this.onKey(ev));
-    this.input.on('pointerdown', () => this.phase === 'play' && this.tap());
+    this.input.on('pointerdown', () => this.phase === 'play' && !this.choiceCb && this.tap());
     this.cameras.main.fadeIn(500, 7, 6, 13);
     this.showPick();
   }
@@ -46,14 +54,8 @@ export class StageScene extends Phaser.Scene {
   }
 
   drawStage() {
-    const g = this.add.graphics();
-    g.fillStyle(0x0c0a16, 1).fillRect(0, 0, 960, 540);
-    for (let y = 0; y < 300; y += 20) for (let x = (y / 20) % 2 ? 0 : 24; x < 960; x += 48) g.fillStyle(0x1a1420, 1).fillRect(x, y, 46, 18);
-    const title = this.add.text(480, 70, this.mode === 'stream' ? '«ЗЕРНО» · LIVE' : 'ПОДВАЛ', { fontFamily: PIXEL, fontSize: '30px', color: '#ff3d8a' }).setOrigin(0.5);
-    title.setShadow(0, 0, '#ff3d8a', 18, true, true);
-    // Сцена и прожекторы
-    g.fillStyle(0x2a2030, 1).fillRect(160, 300, 640, 30);
-    g.fillStyle(0x1a1420, 1).fillRect(160, 330, 640, 40);
+    this.add.rectangle(0, 0, 960, 540, 0x07060d).setOrigin(0);
+    this.add.image(0, 0, paintStageBack(this, { title: this.mode === 'stream' ? '«ЗЕРНО» LIVE' : 'ПОДВАЛ', stream: this.mode === 'stream' })).setOrigin(0).setScale(2);
     this.beams = [];
     [240, 480, 720].forEach((x, i) => {
       const b = this.add.triangle(0, 0, x, 0, x - 120, 330, x + 120, 330, [0xff3d8a, 0xffd166, 0x3df0ff][i], 0.1).setOrigin(0).setBlendMode(Phaser.BlendModes.ADD);
@@ -61,21 +63,22 @@ export class StageScene extends Phaser.Scene {
       this.tweens.add({ targets: b, angle: { from: -4, to: 4 }, duration: 1600 + i * 300, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     });
     // Марк у микрофона
-    g.fillStyle(0x2a2a2a, 1).fillRect(504, 200, 5, 100);
-    g.fillStyle(0x8a8a9a, 1).fillRect(500, 188, 12, 16);
-    this.mark = this.add.sprite(470, 300, 'mark_0').setOrigin(0.5, 1).setScale(0.85);
-    // Толпа: ряды голов, качаются в такт
+    this.mark = addActor(this, 480, 300, 'mark', { scale: 0.95 });
+    actorPlay(this.mark, 'hype');
+    // Толпа со спины: головы, капюшоны, руки с телефонами — качаются в такт
     this.crowd = [];
+    const crowdKeys = crowdBackTextures(this);
     for (let row = 0; row < 3; row++) {
-      for (let x = -20 + row * 18; x < 980; x += 38) {
-        const c = this.add.ellipse(x + Math.random() * 10, 400 + row * 34, 34, 40, [0x15121f, 0x1e1a2e, 0x262036][row]);
+      for (let x = -20 + row * 18; x < 980; x += 40) {
+        const c = this.add.image(x + Math.random() * 10, 440 + row * 40, Phaser.Utils.Array.GetRandom(crowdKeys)).setOrigin(0.5, 1).setScale(2 + row * 0.25);
+        c.setTint([0x6a5a7a, 0x8a7a9a, 0xb0a0c0][row]);
         c.baseY = c.y;
         c.row = row;
         this.crowd.push(c);
       }
     }
     if (this.F.e2MomAtShow && this.mode === 'podval') {
-      this.mom = this.add.sprite(860, 470, 'mom_0').setOrigin(0.5, 1).setScale(0.6).setTint(0x8a7aa0);
+      this.mom = addActor(this, 860, 470, 'mom', { scale: 0.7, flip: true }).setTint(0x8a7aa0);
     }
     // Шкала толпы
     this.add.text(30, 22, this.mode === 'stream' ? 'ЗРИТЕЛИ' : 'ТОЛПА', { fontFamily: PIXEL, fontSize: '10px', color: '#ffd166' });
@@ -233,8 +236,8 @@ export class StageScene extends Phaser.Scene {
     if (this.qte) return this.qteTap();
     const t = audioCtx().currentTime - this.t0;
     const n = this.notes.find((x) => x.state === 'wait' && Math.abs(x.t - t) <= WINDOW);
-    this.mark.setScale(0.88, 0.82);
-    this.tweens.add({ targets: this.mark, scaleX: 0.85, scaleY: 0.85, duration: 120 });
+    this.mark.setScale(ART * 0.98, ART * 0.9);
+    this.tweens.add({ targets: this.mark, scaleX: ART * 0.95, scaleY: ART * 0.95, duration: 120 });
     if (!n) {
       this.setHype(this.hype - 0.6);
       return;
@@ -257,14 +260,24 @@ export class StageScene extends Phaser.Scene {
     this.paused = true;
     const box = this.add2(this.add.rectangle(480, 270, 620, 150, 0x0c0a16, 0.95).setStrokeStyle(3, 0xe8c27a));
     const t1 = this.add2(this.add.text(480, 225, 'РЕЙ ИЗ ЗАЛА: «ПАЙКА-А-А!»', { fontFamily: PIXEL, fontSize: '14px', color: '#e8c27a' }).setOrigin(0.5));
-    const t2 = this.add2(this.add.text(480, 275, '1 — ответить фристайлом (4 точных в такт)\n2 — не обращать внимания', { fontFamily: FONT, fontSize: '18px', color: '#ffffff', align: 'center' }).setOrigin(0.5));
+    // Два варианта — кнопками (мышь, палец) и клавишами 1/2
+    const opts = ['1. ФРИСТАЙЛ (4 в такт)', '2. НЕ ОБРАЩАТЬ ВНИМАНИЯ'].map((label, i) => {
+      const t = this.add2(this.add.text(480, 262 + i * 40, label, {
+        fontFamily: PIXEL, fontSize: '11px', color: '#0c0a16', backgroundColor: i ? '#c9c4ee' : '#ff3d8a', padding: { x: 12, y: 8 },
+      }).setOrigin(0.5));
+      t.setInteractive({ useHandCursor: true }).on('pointerdown', (p, lx, ly, ev) => {
+        ev?.stopPropagation?.();
+        this.choiceCb?.(i);
+      });
+      return t;
+    });
     sfx('boo');
     const c = await new Promise((resolve) => {
       this.choiceCb = resolve;
       this.time.delayedCall(3500, () => this.choiceCb && resolve(1));
     });
     this.choiceCb = null;
-    [box, t1, t2].forEach((o) => o.destroy());
+    [box, t1, ...opts].forEach((o) => o.destroy());
     this.paused = false;
     if (c === 1) {
       this.setHype(this.hype - 6);
@@ -404,7 +417,13 @@ export class StageScene extends Phaser.Scene {
     const v = this.add2(this.add.text(480, 220, res[1], { fontFamily: PIXEL, fontSize: '52px', color: res[2], stroke: '#0c0a16', strokeThickness: 10 }).setOrigin(0.5).setScale(0));
     this.tweens.add({ targets: v, scale: 1, duration: 500, ease: 'Back.out' });
     this.add2(this.add.text(480, 300, `${this.mode === 'stream' ? 'Зрители' : 'Толпа'}: ${Math.round(h)}%`, { fontFamily: FONT, fontSize: '22px', color: '#ffffff' }).setOrigin(0.5));
-    this.add2(this.add.text(480, 480, '[ Enter — дальше ]', { fontFamily: FONT, fontSize: '16px', color: '#77729a' }).setOrigin(0.5));
+    // «Дальше» — кнопка: нажимается мышью, пальцем и Enter
+    const next = this.add2(this.add.text(480, 474, 'ДАЛЬШЕ ▶', {
+      fontFamily: PIXEL, fontSize: '14px', color: '#0c0a16', backgroundColor: '#ffd166', padding: { x: 18, y: 12 },
+    }).setOrigin(0.5));
+    next.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.time.now > this.resultAt + 600 && this.finish());
+    this.add2(this.add.text(480, 514, 'или Enter', { fontFamily: FONT, fontSize: '13px', color: '#77729a' }).setOrigin(0.5));
+    this.resultAt = this.time.now;
     sfx(res[0] === 'fail' ? 'boo' : 'cheer');
     if (res[0] !== 'fail') sfx('clap', 0.3);
   }

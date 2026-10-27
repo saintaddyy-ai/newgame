@@ -2,9 +2,20 @@
 import { state, hasItem, giveItem, takeItem } from '../../state.js';
 import { pulse, energy, now, at, day } from './world.js';
 import { addFollowers, feed, quest, questStatus, receive, post, notify } from '../../phone/model.js';
+import { food, clean, remark, lookFactor } from '../../needs.js';
 
 export const F = state.flags;
-export { state, hasItem, giveItem, takeItem, pulse, energy, now, at, day, addFollowers, feed, quest, questStatus, receive, post, notify };
+export { state, hasItem, giveItem, takeItem, pulse, energy, now, at, day, addFollowers, feed, quest, questStatus, receive, post, notify, food, clean, remark };
+
+// Подписчики за то, где видно самого Марка (стрим, фото с ним): помятый вид — меньше
+export function faceFollowers(app, n, reason) {
+  const k = lookFactor();
+  const got = addFollowers(app, Math.round(n * k), k < 1 ? `${reason} · вид помятый` : reason);
+  if (k < 1 && once(`dirty_comment_${day()}`)) {
+    feed(pickOne(['kot_v_sapogah', 'random_user17', 'rap_kritik_95']), pickOne(['он что, неделю не мылся? даже через экран чувствуется', 'тень, ты норм? выглядишь как после трёх смен на складе', 'талант есть, шампуня нет']));
+  }
+  return got;
+}
 
 export const rel = (id, d) => (state.rel[id] = (state.rel[id] || 0) + d);
 export const relOf = (id) => state.rel[id] || 0;
@@ -35,7 +46,8 @@ export const pickOne = (arr) => arr[Math.floor(Math.random() * arr.length)];
 export function exit(x, label, to, spawnX, { cost = 5, when, open, facing, sfxName = 'click', card } = {}) {
   return {
     x, sfx: sfxName, when,
-    label: () => (open && !open() ? `${label} · закрыто` : label),
+    // Время на дорогу видно заранее: в Эп.2 часы решают, кого ты застанешь
+    label: () => (open && !open() ? `${label} · закрыто` : cost >= 5 ? `${label} · ${cost} мин` : label),
     async use(ctx) {
       if (open && !open()) {
         ctx.sfx('deny');
@@ -54,7 +66,8 @@ export function canPay(n) {
 }
 
 // Последний трек/демка — для заданий «отнести демку»
-export const hasDemo = () => state.tracks.length > 0;
+// Живые выступления («(live)») — не демка: Адаму нужна запись из студии
+export const hasDemo = () => state.tracks.some((t) => !/\(live\)/.test(t.title || ''));
 
 export function markLook(delta) {
   state.stats.look = (state.stats.look || 0) + delta;

@@ -9,6 +9,8 @@ import { drawApartment, drawYard, drawGarage, drawWarehouse, drawPawnshop, drawF
 import { BATHROOM } from './shared.js';
 import { posterView } from './prologue.js';
 import { BEAT, playMusic, stopMusic, sfx } from '../audio.js';
+import { addActor } from '../gfx/actors.js';
+import { drainPhase, food, clean } from '../needs.js';
 
 const F = state.flags;
 const FLOOR = 470;
@@ -27,6 +29,8 @@ export const PHASES = {
 const phase = () => F.e1;
 // Марочка действует несколько часов: текущая фаза и следующая, сон обрывает сразу
 const setPhase = (p) => {
+  // Между фазами проходят часы: голод и грязь копятся (на старте эпизода — нет)
+  if (F.e1 && F.e1 !== p) drainPhase();
   F.e1 = p;
   if (F.acidNow && --F.acidLeft <= 0) endAcid();
 };
@@ -102,6 +106,9 @@ const YARD_PHOTOS = [
 export function startEpisode1() {
   state.episode = 'ep1';
   setPhase('tue');
+  state.food = 75;
+  state.clean = 70;
+  state.starve = 0;
   state.cash = 500;
   state.goal = '';
   F.shifts = 0;
@@ -222,7 +229,7 @@ export const LOCATIONS = {
       barberSign: ['thu', 'thu_eve', 'final', 'outro'].includes(phase()),
     }),
     lamps: YARD_LAMPS,
-    critters: () => (isDay() ? [{ type: 'pigeons', x: 1180, n: 4 }, { type: 'cat', x: 1700, y: 244, depth: 4 }] : [{ type: 'cat', x: 1700, y: 244, depth: 4 }]),
+    critters: () => (isDay() ? [{ type: 'pigeons', x: 1180, n: 4 }, { type: 'cat', x: 1700, y: 266, depth: 4 }] : [{ type: 'cat', x: 1700, y: 266, depth: 4 }]),
     photoSpots: YARD_PHOTOS,
     doors: [{ id: 'entrance', x: 155, w: 126, h: 208, color: 0x3a4658 }],
 
@@ -287,7 +294,7 @@ export const LOCATIONS = {
         },
       },
       {
-        x: 1700, y: 200, label: 'Кот на гараже', range: 50, sfx: 'meow',
+        x: 1700, y: 236, label: 'Кот на гараже', range: 50, sfx: 'meow',
         async use({ d, line }) {
           if (F.catPet) return d.think('Кот смотрит сверху вниз. Как критик.');
           F.catPet = true;
@@ -388,10 +395,19 @@ export const LOCATIONS = {
       },
       {
         x: 872, label: 'Холодильник', sfx: 'fridge',
-        async use({ d, fx }) {
+        async use(ctx) {
+          const { d, fx } = ctx;
           fx.flash(872, 380, 84, 180, 0xbfe8ff, 0.7, 900);
-          if (isDay()) return d.think('На дверце записка: «Ушла на смены. Поешь. Не грусти. М.» Рядом — магнит «Анапа 2009».');
-          await d.think('Холодильник гудит в темноте, как маленький трансформатор.');
+          // Мама оставляет еду: раз за фазу можно поесть
+          const fed = !F[`fridge_${phase()}`];
+          if (isDay()) await d.think('На дверце записка: «Ушла на смены. Поешь. Не грусти. М.» Рядом — магнит «Анапа 2009».');
+          else await d.think('Холодильник гудит в темноте, как маленький трансформатор.');
+          if (!fed) return d.think('Всё, что было, я уже съел. Остался кетчуп и надежда.');
+          const c = await d.choose([isDay() ? '[Поесть: макароны по-флотски]' : '[Поесть: холодная гречка с котлетой]', '[Закрыть]']);
+          if (c === 1) return;
+          F[`fridge_${phase()}`] = true;
+          await ctx.eat(45);
+          await d.think(isDay() ? 'Макароны по-флотски. Мама — гений экономики.' : 'Ем холодную гречку прямо из кастрюли. Вкус детства и одиночества.');
         },
       },
       {
@@ -567,7 +583,7 @@ async function micBreaks({ d, fx, wait, sfx: play, goal, scene, hud }) {
   await d.say('Дэн', 'Короче, варианты. Можно подработать — твоя мама говорила про склад, у тёти Любы.');
   await d.say('Дэн', 'Можно у мамы попросить, но ты сам знаешь…');
   await d.say('Дэн', '…И есть Рей.');
-  await d.say('Марк', 'Рей? Который «Рей в этой малашечке»?');
+  await d.say('Марк', 'Рей? Который «Рей в этой малышечке»?');
   await d.say('Дэн', 'Он самый. У него всегда есть бабки. И всегда есть… всё остальное.');
   await d.say('Дэн', 'Только не ведись на его движ, понял? Он на кислоте с девятого класса. Он тебя улыбнёт, а потом распогодится так, что мать родная не узнает.');
   setPhase('tue_night');
@@ -586,7 +602,7 @@ async function rayMeeting({ d, npc, walk, wait, fx, scene, sfx: play, line, goal
   await d.think('У арки за гаражами кто-то стоит над лужей и разговаривает с ней. Розовые очки, леопардовая куртка, пар изо рта.');
   await d.say('Рей', 'Не, ты не дыши так громко, братик, ты мне лиды пугаешь…');
   ray.setFlipX(true);
-  await d.say('Рей', 'О-о-опа! Тень! Это ж ты в гараже по ночам воешь? Рей в этой малашечке, знаешь же.');
+  await d.say('Рей', 'О-о-опа! Тень! Это ж ты в гараже по ночам воешь? Рей в этой малышечке, знаешь же.');
   d.close();
   await walk(ray, p.x + 90, 170);
   p.setFlipX(false);
@@ -624,7 +640,7 @@ async function rayMeeting({ d, npc, walk, wait, fx, scene, sfx: play, line, goal
   }
   await d.say('Рей', 'Короче. Музыка — это лидогенерация. Каждый слушатель — лид. Каждый лид — бабки. А каждые бабки — сучки.');
   await d.say('Рей', 'Это воронка, братик. А ты пока сверху стоишь и в неё плюёшь.');
-  await d.say('Рей', 'Будут нужны бабки — я тут. Каждый вечер. Рей в этой малашечке.');
+  await d.say('Рей', 'Будут нужны бабки — я тут. Каждый вечер. Рей в этой малышечке.');
   c = await d.choose(['«Спасибо. Подумаю.»', '«Откуда ты вообще всё знаешь?»', '«Мне от тебя ничего не надо.»']);
   if (c === 0) await d.say('Рей', 'Думай. Только пятница не резиновая, братик. Пятница — она как сучка: ждать не будет.');
   else if (c === 1) {
@@ -648,7 +664,7 @@ async function rayRage({ d, scene, walk, wait, fx, sfx: play }) {
   await d.say('Рей', 'Твой Дэн биты с ютуба тырит. Ваш гараж воняет бабкиными коврами. Ваш двор — пайка, ваш район — пайка, ваш рэп — пайка в квадрате!');
   d.close();
   // Мимо идёт пацан с мячом
-  const kid = scene.add.sprite(scene.player.x - 300, FLOOR, 'kid_0').setOrigin(0.5, 1).setDepth(10);
+  const kid = addActor(scene, scene.player.x - 300, FLOOR, 'kid', { depth: 10 });
   await walk(kid, scene.player.x - 140, 110);
   await d.say('Рей', '…Щас распогодимся.');
   play('ball');
@@ -746,11 +762,12 @@ async function grannyTalk({ d, line }) {
 
 // ---------- Сон и утро ----------
 
-async function sleep({ d, card, go }) {
+async function sleep({ d, card, go, lieDown }) {
   const p = phase();
   if (p === 'tue_night') {
     await d.think('Ложусь. Потолок. Пятнадцать тысяч. Потолок. Рей. Потолок.');
     d.close();
+    await lieDown();
     endAcid();
     setPhase('wed');
     saveGame({ loc: 'apartment', spawnX: 200 });
@@ -766,6 +783,7 @@ async function sleep({ d, card, go }) {
     }
     await d.think('Засыпаю под гул холодильника. Снится, что я на сцене, а микрофон — это банан.');
     d.close();
+    await lieDown();
     endAcid();
     setPhase('thu');
     await card('ЧЕТВЕРГ', 'до «Подвала» — один день');
@@ -779,6 +797,7 @@ async function sleep({ d, card, go }) {
   const next = p === 'wed' ? 'wed_night' : 'thu_eve';
   await d.think(next === 'wed_night' ? 'Закрываю глаза на минуту. Открываю — за окном темно.' : 'Проваливаюсь в сон. Просыпаюсь от сообщения Дэна: «ТЫ ГДЕ».');
   d.close();
+  await lieDown();
   setPhase(next);
   await card(next === 'wed_night' ? 'СРЕДА · НОЧЬ' : 'ЧЕТВЕРГ · ВЕЧЕР', next === 'wed_night' ? 'мама скоро придёт со смены' : 'Дэн ждёт в гараже');
   go('apartment', 200);
@@ -1039,6 +1058,10 @@ async function afterShift({ d, npc, walk, wait, cash, line, goal, card, go, fx, 
   F.shiftResult = null;
   F.shiftInProgress = false;
   F.shifts = (F.shifts || 0) + 1;
+  // Смена на складе: обед из столовой, но пыль и пот до костей
+  food(25);
+  clean(-35);
+  scene.refreshHud?.();
   if (phase() === 'wed') F.workedWed = true;
   if (phase() === 'thu') F.workedThu = true;
   if (r.hits >= Math.ceil(r.total * 0.8)) F.goodRhythm = true;
@@ -1051,9 +1074,9 @@ async function afterShift({ d, npc, walk, wait, cash, line, goal, card, go, fx, 
     line({ id: 'warehouse', text: 'Склад глотает мечты по сорок коробок за смену', tag: 'pain' });
     // Рей подъезжает к воротам
     F.rayAtWarehouse = true;
-    const ray = scene.add.sprite(1560, FLOOR, 'ray_0').setOrigin(0.5, 1).setDepth(10).setFlipX(true);
+    const ray = addActor(scene, 1560, FLOOR, 'ray', { depth: 10, flip: true });
     await walk(ray, 1400, 140);
-    await d.say('Рей', 'Братик! Ты тут коробки таскаешь? Пайка какая… Рей в этой малашечке, если что.');
+    await d.say('Рей', 'Братик! Ты тут коробки таскаешь? Пайка какая… Рей в этой малышечке, если что.');
     await d.think('Рей что-то передаёт Палычу через окошко. Палыч быстро прячет это в карман жилета.');
     d.close();
     await walk(ray, 1560, 160);
@@ -1232,6 +1255,13 @@ async function rayDeal(ctx) {
     if (c2 === 0) {
       d.close();
       const sold = await pickLines(3, 'ОТДАТЬ РЕЮ');
+      if (!sold) {
+        // Передумал в последний момент — строчки остаются при мне
+        state.stats.honesty += 1;
+        await d.think('Смотрю на страницу и закрываю тетрадь. Не могу. Это не товар.');
+        await d.say('Рей', '(надевает очки обратно) Пайка… Но я понял. Своё не продают. Пока.');
+        return;
+      }
       sold.forEach((l) => {
         const i = state.lines.indexOf(l);
         if (i >= 0) state.lines.splice(i, 1);
@@ -1252,7 +1282,7 @@ async function rayDeal(ctx) {
       await d.say('Рей', 'Уважаю. Пайка, но уважаю.');
     }
   } else {
-    return d.say('Рей', 'Передумаешь обратно — я тут. Рей в этой малашечке. Всегда.');
+    return d.say('Рей', 'Передумаешь обратно — я тут. Рей в этой малышечке. Всегда.');
   }
 
   // Марочка — один раз
@@ -1335,6 +1365,7 @@ async function sleepInGarage(ctx) {
   }
   await d.say('Дэн', 'Плед в шкафу. Если ночью замёрзнешь — бабушкин ковёр снимай. Шучу. Не трогай ковёр.');
   d.close();
+  await ctx.lieDown(210);
   F.sleptOut = (F.sleptOut || 0) + 1;
   endAcid();
   const next = phase() === 'tue_night' ? 'wed' : 'thu';
@@ -1470,7 +1501,7 @@ async function afterRehearsal({ d, acid, goal, npc, scene, wait }) {
 async function outro({ d, npc, walk, wait, fx, scene, sfx: play, line, item, go }) {
   const p = scene.player;
   // Аркаша клеит стикеры на гаражи
-  const ark = scene.add.sprite(2190, FLOOR, 'arkasha_0').setOrigin(0.5, 1).setDepth(10).setFlipX(true);
+  const ark = addActor(scene, 2190, FLOOR, 'arkasha', { depth: 10, flip: true });
   await wait(500);
   await walk(p, 2090, 150);
   p.setFlipX(false);

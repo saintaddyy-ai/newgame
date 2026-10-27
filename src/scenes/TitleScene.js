@@ -1,9 +1,14 @@
 import Phaser from 'phaser';
 import { unlockAudio, sfx } from '../audio.js';
 import { state, resetState, readSave, loadGame, addLine, saveGame } from '../state.js';
-import { drawSkyline } from '../story/backdrops.js';
+import { paintTitle } from '../gfx/places/scenes.js';
+import { addActor, pose } from '../gfx/actors.js';
+import { Panel } from '../ui/frame.js';
+import { applyLook } from '../gfx/fx.js';
 import { startEpisode1 } from '../story/episode1.js';
 import { startEpisode2 } from '../story/episode2/main.js';
+import { reviveAfterLoad } from '../needs.js';
+import { clearRingQueue } from '../ui/Phone.js';
 
 // Выборы пролога «по умолчанию» — для старта сразу с Эпизода 1
 function prologueDefaults() {
@@ -49,7 +54,13 @@ export class TitleScene extends Phaser.Scene {
   }
 
   create() {
-    drawSkyline(this, 960, { seed: 7 });
+    this.leaving = false; // сцена переиспользуется: после итогов или «Конца» меню снова должно работать
+    clearRingQueue();
+    paintTitle(this);
+    // Марк сидит на краю крыши и смотрит на город
+    const mark = addActor(this, 180, 506, 'mark', { depth: 2 });
+    pose(mark, 'sit');
+    applyLook(this);
     this.add.particles(0, -20, 'drop', {
       x: { min: -100, max: 1060 }, lifespan: 900, speedY: { min: 700, max: 900 }, speedX: -120,
       alpha: { start: 0.35, end: 0.1 }, quantity: 3, frequency: 16,
@@ -73,6 +84,9 @@ export class TitleScene extends Phaser.Scene {
     items.push({ label: 'СРАЗУ ЭПИЗОД 2', run: () => this.episode2() });
 
     this.sel = 0;
+    // Пиксельная панель под меню
+    const mh = items.length * 40 + 24;
+    new Panel(this, 300, 300, 360, mh, { accent: 0xff3d8a, alpha: 0.82 }).objects.forEach((o) => o.setDepth(9));
     this.menu = items.map((it, i) => {
       const t = this.add.text(480, 320 + i * 40, it.label, { fontFamily: '"Press Start 2P"', fontSize: '15px', color: '#c9c4ee' }).setOrigin(0.5).setDepth(10);
       t.setInteractive({ useHandCursor: true }).on('pointerover', () => this.select(i)).on('pointerdown', () => this.pick(i));
@@ -80,6 +94,8 @@ export class TitleScene extends Phaser.Scene {
     });
     this.select(0);
 
+    // Полоса под подсказкой: граффити «ТЕНЬ» на крыше не лезет в текст
+    this.add.rectangle(480, 507, 960, 26, 0x07060d, 0.78).setDepth(9);
     this.add.text(480, 506, 'ПРОЛОГ + 2 ЭПИЗОДА  |  18+  |  ← → ходить · Shift тихо · E действие · Q тетрадь · P телефон', {
       fontFamily: '"PT Mono", monospace', fontSize: '14px', color: '#77729a',
     }).setOrigin(0.5).setDepth(10);
@@ -136,6 +152,7 @@ export class TitleScene extends Phaser.Scene {
   continueGame() {
     const where = loadGame();
     if (!where) return this.newGame();
+    reviveAfterLoad();
     if (where.done === 'prologue') {
       const w = startEpisode1();
       saveGame(w);

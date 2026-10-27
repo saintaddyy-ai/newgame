@@ -1,5 +1,6 @@
 // Живой мир Эпизода 2: часы, расписания, настроение людей, «Пульс», энергия.
 import { state, hhmm, DAYS } from '../../state.js';
+import { drainNight } from '../../needs.js';
 
 const F = state.flags;
 export const DAY_ORDER = ['fri', 'sat', 'sun'];
@@ -23,9 +24,30 @@ export function nextDay() {
   if (i >= DAY_ORDER.length - 1) return false;
   state.time.day = DAY_ORDER[i + 1];
   state.time.min = at(10);
+  drainNight();
+  // Сон обрывает любой «трип»; вчерашние свидания закончились
+  F.acidNow = false;
+  F.acidUntil = null;
+  F.dateWith = null;
   // Новый день: подписчики «за сегодня» считаются заново, у всех новое настроение
   Object.assign(state.social.dayStart, state.social.followers);
   F.e2Dates = 0;
+  return true;
+}
+
+// Минуты от начала эпизода (пятница 00:00) — для сроков, которые переходят через полночь
+export const absMin = () => DAY_ORDER.indexOf(day()) * 1440 + now();
+
+// Марочка действует часов пять (или до сна). Эффект на экране сверяется с этим каждый кадр-полсекунды
+export const ACID_MIN = 300;
+export function acidActive() {
+  if (!F.acidNow) return false;
+  if (!F.acidUntil) F.acidUntil = absMin() + ACID_MIN;
+  if (absMin() >= F.acidUntil) {
+    F.acidNow = false;
+    F.acidUntil = null;
+    return false;
+  }
   return true;
 }
 

@@ -8,6 +8,7 @@ const X = 150;
 const Y = 50;
 const W = 660;
 const H = 420;
+const ROWS = 6; // строк на экране; остальные — прокруткой (▲▼, колёсико, стрелки)
 
 // Комп Дэна: папка «ДЕМКИ», где лежат все записанные треки. Можно выбрать и послушать.
 export class DemoPC {
@@ -17,7 +18,16 @@ export class DemoPC {
     this.root = uiContainer(scene, 0, 0, 1100).setVisible(false);
     this.demos = [];
     this.sel = 0;
+    this.top = 0;
     this.playing = null;
+    this.loadToken = 0;
+    // Колёсико мыши листает список
+    const onWheel = (p, objs, dx, dy) => {
+      if (!this.open || !this.demos.length) return;
+      this.scrollBy(dy > 0 ? 1 : -1);
+    };
+    scene.input.on('wheel', onWheel);
+    scene.events.once('shutdown', () => scene.input.off('wheel', onWheel));
   }
 
   async show() {
@@ -35,7 +45,7 @@ export class DemoPC {
     const title = s.add.text(X + 12, Y + 8, 'DAN_PC  ▸  C:\\ДЕМКИ', { fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#061420' });
     const close = s.add.text(X + W - 12, Y + 8, '[X]', { fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#061420' }).setOrigin(1, 0)
       .setInteractive({ useHandCursor: true }).on('pointerdown', () => this.hide());
-    this.hint = s.add.text(X + W / 2, Y + H - 22, 'клик или ↑↓ + ENTER — слушать / стоп   ESC — выйти', {
+    this.hint = s.add.text(X + W / 2, Y + H - 22, 'клик или ↑↓ + ENTER — слушать / стоп · колёсико — листать · ESC — выйти', {
       fontFamily: '"PT Mono", monospace', fontSize: '15px', color: '#4a8aa0',
     }).setOrigin(0.5);
     // Строки развёртки старого монитора
@@ -49,8 +59,9 @@ export class DemoPC {
     this.root.setAlpha(0);
     s.tweens.add({ targets: this.root, alpha: 1, duration: 200 });
 
-    this.demos = await listDemos();
+    this.demos = (await listDemos()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     this.sel = 0;
+    this.top = 0;
     this.renderRows();
     return new Promise((r) => (this.onClose = r));
   }
@@ -64,22 +75,54 @@ export class DemoPC {
       }).setOrigin(0.5));
       return;
     }
-    this.demos.slice(0, 6).forEach((d, i) => {
-      const y = Y + 48 + i * 40;
+    this.downBtn = null;
+    this.upBtn = null;
+    this.demos.slice(this.top, this.top + ROWS).forEach((d, k) => {
+      const i = this.top + k;
+      const y = Y + 48 + k * 40;
       const on = i === this.sel;
-      const bg = s.add.rectangle(X + 12, y, W - 24, 34, on ? 0x3df0ff : 0x0c2638, on ? 0.25 : 1).setOrigin(0);
+      const bg = s.add.rectangle(X + 12, y, W - 60, 34, on ? 0x3df0ff : 0x0c2638, on ? 0.25 : 1).setOrigin(0);
       const date = new Date(d.createdAt);
       const dd = `${String(date.getDate()).padStart(2, '0')}.${String(date.getMonth() + 1).padStart(2, '0')}`;
       const icon = this.playing?.id === d.id ? '■' : '▶';
       const voice = d.voice ? `голос ✓  подача ${d.score ?? '—'}%` : 'без голоса';
       const t = s.add.text(X + 24, y + 8, `${icon}  «${d.title}»`, { fontFamily: '"PT Mono", monospace', fontSize: '17px', color: on ? '#ffffff' : '#bfe8f0' });
-      const meta = s.add.text(X + W - 24, y + 9, `${dd}  ·  ${voice}`, { fontFamily: '"PT Mono", monospace', fontSize: '14px', color: '#6aa8b8' }).setOrigin(1, 0);
+      const meta = s.add.text(X + W - 60, y + 9, `${dd}  ·  ${voice}`, { fontFamily: '"PT Mono", monospace', fontSize: '14px', color: '#6aa8b8' }).setOrigin(1, 0);
       bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
         this.sel = i;
         this.toggle();
       });
       this.rowsBox.add([bg, t, meta]);
     });
+    // Кнопки прокрутки справа от списка
+    const mk = (y, label, d) => {
+      const b = s.add.rectangle(X + W - 30, y, 32, 32, 0x0c2638).setStrokeStyle(2, 0x3df0ff, 0.6);
+      const t = s.add.text(X + W - 30, y, label, { fontFamily: '"PT Mono", monospace', fontSize: '16px', color: '#bfe8f0' }).setOrigin(0.5);
+      b.setInteractive({ useHandCursor: true }).on('pointerdown', (p, lx, ly, ev) => {
+        ev?.stopPropagation?.();
+        this.scrollBy(d);
+      });
+      this.rowsBox.add([b, t]);
+      return b;
+    };
+    if (this.top > 0) this.upBtn = mk(Y + 64, '▲', -1);
+    if (this.top + ROWS < this.demos.length) this.downBtn = mk(Y + 48 + (ROWS - 1) * 40 + 16, '▼', 1);
+    if (this.demos.length > ROWS) {
+      this.rowsBox.add(s.add.text(X + W - 30, Y + 48 + ROWS * 40 / 2, `${this.top + 1}–${Math.min(this.demos.length, this.top + ROWS)}\nиз ${this.demos.length}`, {
+        fontFamily: '"PT Mono", monospace', fontSize: '11px', color: '#4a8aa0', align: 'center',
+      }).setOrigin(0.5));
+    }
+  }
+
+  // Прокрутка на d строк; выделение остаётся в видимой части
+  scrollBy(d) {
+    const max = Math.max(0, this.demos.length - ROWS);
+    const top = Phaser.Math.Clamp(this.top + d, 0, max);
+    if (top === this.top) return;
+    this.top = top;
+    this.sel = Phaser.Math.Clamp(this.sel, this.top, this.top + ROWS - 1);
+    sfx('click');
+    this.renderRows();
   }
 
   handleKey(ev) {
@@ -88,10 +131,13 @@ export class DemoPC {
       if (['Enter', ' ', 'e', 'у'].includes(ev.key)) this.hide();
       return;
     }
-    const n = Math.min(6, this.demos.length);
+    const n = this.demos.length;
     if (ev.key === 'ArrowUp' || ev.key === 'w' || ev.key === 'ц') this.sel = (this.sel - 1 + n) % n;
     if (ev.key === 'ArrowDown' || ev.key === 's' || ev.key === 'ы') this.sel = (this.sel + 1) % n;
     if (['ArrowUp', 'ArrowDown', 'w', 's', 'ц', 'ы'].includes(ev.key)) {
+      // Выделение уехало за край — список едет следом
+      if (this.sel < this.top) this.top = this.sel;
+      if (this.sel >= this.top + ROWS) this.top = this.sel - ROWS + 1;
       sfx('click');
       this.renderRows();
     }
@@ -100,12 +146,15 @@ export class DemoPC {
 
   async toggle() {
     const d = this.demos[this.sel];
+    if (!d) return;
     const wasSame = this.playing?.id === d.id;
     this.stop();
     sfx('click');
     if (wasSame) return this.renderRows();
+    // Пока демка грузится, игрок мог нажать другую — играет только последняя
+    const my = ++this.loadToken;
     const h = await playDemo(d);
-    if (!h || !this.open) return h?.stop();
+    if (!h || !this.open || my !== this.loadToken) return h?.stop();
     this.playing = { id: d.id, h, demo: d };
     this.renderRows();
     this.buildPlayer(d);

@@ -1,6 +1,9 @@
 import Phaser from 'phaser';
 import { state } from '../state.js';
 import { BEAT, audioCtx, loadBuffer, playBuffer, sfx } from '../audio.js';
+import { addActor } from '../gfx/actors.js';
+import { ART } from '../gfx/pix.js';
+import { paintWarehouseGame } from '../gfx/places/scenes.js';
 
 const ZONE_X = 300;
 const START_X = 1010;
@@ -17,6 +20,9 @@ export class WarehouseScene extends Phaser.Scene {
   }
 
   create({ shift = 1, pay = BASE_PAY, back = 'warehouse' }) {
+    // Коробки прошлой смены не должны «закончить» новую в первом же кадре
+    this.ready = false;
+    this.boxes = [];
     this.total = shift === 1 ? 24 : 20;
     this.basePay = pay;
     this.backLoc = back;
@@ -25,22 +31,17 @@ export class WarehouseScene extends Phaser.Scene {
     this.done = false;
     this.cameras.main.fadeIn(400, 7, 6, 13);
 
-    const g = this.add.graphics();
-    g.fillStyle(0x3a3e46, 1).fillRect(0, 0, 960, 540);
-    for (let x = 0; x < 960; x += 120) g.fillStyle(0x34383f, 1).fillRect(x, 0, 6, 540);
-    g.fillStyle(0x2a2c30, 1).fillRect(0, 440, 960, 100);
-    // Лента
-    g.fillStyle(0x1a1c20, 1).fillRect(140, 360, 900, 30);
-    g.fillStyle(0x2a2a30, 1).fillRect(140, 390, 900, 50);
+    // Склад и лента конвейера — пиксельный фон
+    this.add.image(0, 0, paintWarehouseGame(this)).setOrigin(0).setScale(2);
     this.rollers = [];
     for (let x = 150; x < 1040; x += 30) this.rollers.push(this.add.rectangle(x, 375, 4, 26, 0x4a4a52));
     // Зона ловли
     this.zone = this.add.rectangle(ZONE_X, 330, 70, 80, 0xffd166, 0.18).setStrokeStyle(3, 0xffd166);
     this.add.text(ZONE_X, 270, 'ЛОВИ', { fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#ffd166' }).setOrigin(0.5);
     // Марк и стопка
-    this.mark = this.add.sprite(ZONE_X - 120, 440, 'mark_0').setOrigin(0.5, 1).setFlipX(false);
+    this.mark = addActor(this, ZONE_X - 120, 440, 'mark');
     this.stack = [];
-    this.palych = this.add.sprite(860, 440, 'palych_0').setOrigin(0.5, 1).setFlipX(true).setScale(0.8);
+    this.palych = addActor(this, 860, 440, 'palych', { flip: true, scale: 0.9 });
 
     this.add.text(480, 40, 'РАЗГРУЗКА', { fontFamily: '"Press Start 2P"', fontSize: '22px', color: '#ffffff', stroke: '#ff8a20', strokeThickness: 6 }).setOrigin(0.5);
     this.scoreText = this.add.text(480, 84, '', { fontFamily: '"PT Mono", monospace', fontSize: '20px', color: '#c9c4ee' }).setOrigin(0.5);
@@ -83,8 +84,8 @@ export class WarehouseScene extends Phaser.Scene {
     if (!this.ready || this.done) return;
     const t = this.now();
     const b = this.boxes.find((x) => x.state === 'move' && Math.abs(x.arrive - t) <= WINDOW);
-    this.mark.setScale(1.06, 0.94);
-    this.tweens.add({ targets: this.mark, scaleX: 1, scaleY: 1, duration: 120 });
+    this.mark.setScale(ART * 1.06, ART * 0.94);
+    this.tweens.add({ targets: this.mark, scaleX: ART, scaleY: ART, duration: 120 });
     if (!b) {
       sfx('click');
       return;

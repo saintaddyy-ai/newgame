@@ -1,16 +1,18 @@
 // Город: кафе и их работники, туалеты, драки посетителей, барбершоп, тату, одежда, прохожие и фанаты.
 import { voiced } from '../../voice.js';
-import { F, state, pulse, energy, now, day, addFollowers, feed, once, pickOne, weighted, markLook } from './common.js';
+import { F, state, pulse, energy, now, day, addFollowers, faceFollowers, feed, once, pickOne, weighted, markLook, clean } from './common.js';
 import { workerHello, workerMood } from './workers.js';
 import { randomSpec, personTexture } from './people.js';
 import { repaintMark, OUTFITS } from './look.js';
+import { addActor, walk as actorWalk } from '../../gfx/actors.js';
 
 // ---------- Работники кафе ----------
 
+// [название, цена, энергия, сытость]
 const MENUS = {
-  zerno: [['Американо', 150, 15], ['Капучино с котиком', 220, 18], ['Круассан', 180, 22]],
-  pyshka: [['Пышки, три штуки', 120, 22], ['Чай из бака', 50, 8], ['Пышки, десять штук', 350, 40]],
-  noch: [['Безалкогольный с зонтиком', 300, 10], ['Коктейль «Подвал»', 450, 5], ['Бургер', 400, 30]],
+  zerno: [['Американо', 150, 15, 3], ['Капучино с котиком', 220, 18, 8], ['Круассан', 180, 22, 25]],
+  pyshka: [['Пышки, три штуки', 120, 22, 25], ['Чай из бака', 50, 8, 3], ['Пышки, десять штук', 350, 40, 60]],
+  noch: [['Безалкогольный с зонтиком', 300, 10, 4], ['Коктейль «Подвал»', 450, 5, 2], ['Бургер', 400, 30, 55]],
 };
 
 export async function workerTalk(ctx, w) {
@@ -28,7 +30,8 @@ export async function workerTalk(ctx, w) {
     const item = menu.find((x) => x[0] === pick.slice(4));
     if (state.cash < item[1]) return d.say(w.name, m <= -1 ? 'Денег нет? До свидания.' : 'Не хватает… Ну, в другой раз.');
     ctx.cash(-item[1], item[0]);
-    energy(item[2]);
+    // Ест или пьёт тут же, у стойки
+    await ctx.eat(item[3], { energy: item[2] });
     ctx.time(15);
     if (item[0] === 'Коктейль «Подвал»') pulse(-1);
     return d.think(pickOne(['Горячее, сладкое — то, что надо.', 'Вкусно. Даже слишком для этого района.', 'Сижу у окна. Город за стеклом идёт мимо, как клип без звука.']));
@@ -59,7 +62,7 @@ export async function visitorTalk(ctx) {
     const c = await d.choose(['[Сфоткаться]', '«Не сейчас.»']);
     if (c === 0) {
       ctx.sfx('shutter');
-      addFollowers('kadr', 12, 'сторис с фанатом');
+      faceFollowers('kadr', 12, 'сторис с фанатом');
       pulse(1);
       return d.say('Посетитель', 'Аааа! Спасибо! Я всем покажу!');
     }
@@ -94,6 +97,7 @@ export async function cafeFight(ctx) {
     if (Math.random() < 0.4) {
       sfx('punch');
       energy(-15);
+      clean(-8);
       fx.shake(250, 0.012);
       await d.think('Прилетает в плечо. Не мне предназначалось, но досталось мне. Зато они остыли.');
     } else {
@@ -159,6 +163,10 @@ export async function barberTalk(ctx) {
   const cut = HAIRCUTS.find((h) => h[0] === pick);
   if (state.cash < cut[2]) return d.say('Хачик', 'Дорогой, денег нет — красоты нет. Приходи богатым. Или хотя бы с чаевыми.');
   ctx.cash(-cut[2], `стрижка: ${cut[1]}`);
+  d.close();
+  ctx.scene.player.__pose = 'sit';
+  await ctx.anim('sit', 1200);
+  ctx.scene.player.__pose = null;
   sfx('scissors');
   ctx.time(60);
   fx.dust(ctx.scene.player.x, 300, 80);
@@ -211,6 +219,8 @@ export async function clothesTalk(ctx, w) {
   if (pick === 'bye') return;
   if (pick === 'default') {
     F.lookOutfit = null;
+    d.close();
+    await ctx.anim('dress', 900);
     repaintMark(ctx.scene);
     return d.think('Моё худи. Как домой вернулся.');
   }
@@ -224,6 +234,10 @@ export async function clothesTalk(ctx, w) {
     F[`look_${pick}`] = true;
     markLook(pick === 'leather' ? 2 : 1);
   }
+  // Переодевается в примерочной: руки вверх, вспышка — и новый образ
+  d.close();
+  await ctx.anim('dress', 1000);
+  ctx.fx.screenFlash(0xffffff, 200);
   repaintMark(ctx.scene);
   if (pick === 'leopard') {
     pulse(-2);
@@ -249,10 +263,11 @@ export function ambientWalkers(scene, width, n = 3) {
   for (let i = 0; i < n; i++) {
     scene.time.delayedCall(800 + i * 2600, function walk() {
       if (!scene.scene.isActive()) return;
-      const key = personTexture(scene, randomSpec(`amb_${Math.random()}`));
+      const key = personTexture(scene, randomSpec(`amb_${Math.floor(Math.random() * 40)}`), null, 'crowd');
       const dir = Math.random() < 0.5 ? 1 : -1;
-      const s = scene.add.sprite(dir > 0 ? -60 : width + 60, 470, `${key}_0`).setOrigin(0.5, 1).setDepth(9).setAlpha(0.9).setScale(0.92);
-      s.setFlipX(dir < 0).play(`${key}_walk`);
+      const s = addActor(scene, dir > 0 ? -60 : width + 60, 470, key, { depth: 9, scale: 0.96, flip: dir < 0 }).setAlpha(0.95);
+      actorWalk(s);
+      s.anims.timeScale = 0.8;
       scene.tweens.add({
         targets: s, x: dir > 0 ? width + 60 : -60, duration: (width + 120) * (8 + Math.random() * 4),
         onComplete: () => {

@@ -1,4 +1,7 @@
 import Phaser from 'phaser';
+import { QUALITY_LABEL } from '../gfx/quality.js';
+import { applyLook } from '../gfx/fx.js';
+import { needsOn, needsTodo, FOOD_LOW, CLEAN_LOW } from '../needs.js';
 import { state, clockShort, saveSettings, DAYS } from '../state.js';
 import { sfx, setVolumes, audioCtx, decodeBlob, playBuffer } from '../audio.js';
 import { voiceSettings } from '../voice.js';
@@ -21,6 +24,12 @@ const SY = 46;
 const SW = PW - 28;
 const SH = 418;
 const HIDDEN_Y = 560;
+// Звонки, которые ждут своей очереди, живут дольше одной локации: смена сцены их не теряет
+const RING_QUEUE = [];
+// Новая игра или загрузка — старые звонки не переносятся
+export function clearRingQueue() {
+  RING_QUEUE.length = 0;
+}
 const FONT = '"PT Mono", monospace';
 const PIXEL = '"Press Start 2P"';
 
@@ -56,13 +65,26 @@ export class Phone {
     this.stack = [];
     this.sel = 0;
     this.focus = [];
-    this.root = uiContainer(scene, PX, HIDDEN_Y, 1500).setVisible(false);
+    this.root = uiContainer(scene, phoneX(), HIDDEN_Y, 1500).setVisible(false);
     this.buildBody();
     this.scr = scene.add.container(SX, SY);
     this.root.add(this.scr);
     this.banner = uiContainer(scene, 0, 0, 1490);
+    this.bannerQueue = [];
+    this.queue = RING_QUEUE;
+    this.makeDrag();
+    // Колёсико мыши — прокрутка списков
+    const onWheel = (pointer, objs, dx, dy) => {
+      if (!this.open || this.inCamera) return;
+      if (this.overPhone(pointer)) this.scroll(dy > 0 ? 1 : -1);
+    };
+    scene.input.on('wheel', onWheel);
     this.unsub = onPhone((ev) => this.onEvent(ev));
     scene.events.once('shutdown', () => {
+      // Ушёл из локации, пока звонят, — звонок повторится в следующей
+      if (this.ringing) RING_QUEUE.unshift(this.ringing);
+      this.ringing = null;
+      scene.input.off('wheel', onWheel);
       this.unsub();
       this.stopAudio();
       this.ringLoop?.remove();
@@ -163,6 +185,16 @@ export class Phone {
     this.sel = 0;
     this.offset = 0;
     this.render();
+    this.slide(1);
+  }
+
+  // Экран «въезжает» при переходе: вперёд — справа, назад — слева
+  slide(dir) {
+    const s = this.scene;
+    s.tweens.killTweensOf(this.scr);
+    this.scr.x = SX + 18 * dir;
+    this.scr.alpha = 0.3;
+    s.tweens.add({ targets: this.scr, x: SX, alpha: 1, duration: 140, ease: 'Cubic.out' });
   }
 
   back() {
@@ -179,6 +211,7 @@ export class Phone {
     this.sel = 0;
     this.offset = 0;
     this.render();
+    this.slide(-1);
   }
 
   // ---------- Отрисовка ----------
@@ -236,6 +269,26 @@ export class Phone {
     return r;
   }
 
+  // Полоса прокрутки и кнопки ▲▼ — для мыши и пальца
+  scrollBar() {
+    if (!this.scrollMax) return;
+    const top = 50;
+    const h = SH - top - 10;
+    const frac = (this.offset || 0) / this.scrollMax;
+    this.rect(SW - 4, top, 3, h, 0xffffff, 0.12);
+    this.rect(SW - 4, top + frac * (h - 30), 3, 30, 0xffffff, 0.6);
+    const mk = (y, label, d) => {
+      const b = this.add(this.scene.add.rectangle(SW - 20, y, 28, 24, 0x000000, 0.45).setStrokeStyle(1, 0xffffff, 0.3));
+      this.text(SW - 20, y, label, { fontSize: '12px', color: '#ffffff' }).setOrigin(0.5);
+      b.setInteractive({ useHandCursor: true }).on('pointerdown', (p, lx, ly, ev) => {
+        ev?.stopPropagation?.();
+        this.scroll(d);
+      });
+    };
+    if ((this.offset || 0) > 0) mk(top + 14, '▲', -1);
+    if ((this.offset || 0) < this.scrollMax) mk(SH - 18, '▼', 1);
+  }
+
   highlight() {
     this.focus.forEach((f, j) => {
       if (f.grid) f.r.setStrokeStyle(j === this.sel ? 2 : 0, 0xffffff, 0.9);
@@ -247,7 +300,9 @@ export class Phone {
     this.clear();
     const fn = this[`page_${this.page}`];
     this.drawWallpaper(this.page !== 'home' && this.page !== 'camera');
+    this.scrollMax = undefined;
     fn ? fn.call(this, this.arg) : this.page_home();
+    this.scrollBar();
     this.sel = Phaser.Math.Clamp(this.sel, 0, Math.max(0, this.focus.length - 1));
     this.highlight();
     this.scene.refreshPhoneBadge?.();
@@ -376,13 +431,33 @@ export class Phone {
     y += 14;
     const goal = this.text(10, y, state.goal || 'Пока ничего — просто живи.', { fontSize: '13px', color: '#ffffff', wordWrap: { width: SW - 20 } });
     y += goal.height + 12;
+    // Самочувствие: силы (Эп.2), сытость, чистота
+    if (needsOn() && !this.offset) {
+      this.text(10, y, 'САМОЧУВСТВИЕ', { fontFamily: PIXEL, fontSize: '8px', color: '#6ad8ff' });
+      y += 14;
+      const bars = [
+        state.episode === 'ep2' && ['Силы', state.energy, state.energy < 25 ? 0xff6b6b : 0x8ae6a0],
+        ['Сытость', state.food, state.food < FOOD_LOW ? 0xff6b6b : 0xf0c060],
+        ['Чистота', state.clean, state.clean < CLEAN_LOW ? 0xb8a070 : 0x6ad8ff],
+      ].filter(Boolean);
+      const bw = Math.floor((SW - 20 - (bars.length - 1) * 8) / bars.length);
+      bars.forEach(([label, v, c], i) => {
+        const x = 10 + i * (bw + 8);
+        this.text(x, y, `${label} ${Math.round(v)}`, { fontSize: '10px', color: '#c9c4ee' });
+        this.rect(x, y + 14, bw, 5, 0x2a2838);
+        this.rect(x, y + 14, Math.max(1, (bw * Math.max(0, Math.min(100, v))) / 100), 5, c);
+      });
+      y += 28;
+    }
     const qs = Object.entries(state.quests);
+    // «Поесть» / «Помыться» — живые дела, появляются, когда пора
+    const needs = needsTodo().map((n, i) => [`need_${i}`, { title: n.title, note: n.note, status: 'active', urgent: n.urgent }]);
     const groups = [
-      ['ДЕЛА', qs.filter(([, q]) => q.status === 'active'), '#8ae6a0'],
+      ['ДЕЛА', [...needs, ...qs.filter(([, q]) => q.status === 'active')], '#8ae6a0'],
       ['СДЕЛАНО', qs.filter(([, q]) => q.status === 'done'), '#77729a'],
       ['ПРОВАЛЕНО', qs.filter(([, q]) => q.status === 'failed'), '#ff6b8a'],
     ];
-    if (!qs.length) this.text(10, y, 'Независимых дел нет.\nЛюди дают их сами — разговаривай.', { fontSize: '12px', color: '#77729a' });
+    if (!qs.length && !needs.length) this.text(10, y, 'Независимых дел нет.\nЛюди дают их сами — разговаривай.', { fontSize: '12px', color: '#77729a' });
     const all = [];
     groups.forEach(([title, list, color]) => list.length && all.push({ title, color }, ...list.map(([id, q]) => ({ q, color }))));
     const start = this.offset || 0;
@@ -393,7 +468,7 @@ export class Phone {
         y += 14;
         return;
       }
-      const t = this.text(16, y, `• ${it.q.title}`, { fontSize: '13px', color: it.q.status === 'active' ? '#ffffff' : '#77729a', wordWrap: { width: SW - 30 } });
+      const t = this.text(16, y, `• ${it.q.title}`, { fontSize: '13px', color: it.q.urgent ? '#ff6b8a' : it.q.status === 'active' ? '#ffffff' : '#77729a', wordWrap: { width: SW - 30 } });
       y += t.height + 2;
       if (it.q.note && it.q.status === 'active') {
         const n = this.text(26, y, it.q.note, { fontSize: '11px', color: '#a9a6c8', wordWrap: { width: SW - 40 } });
@@ -564,12 +639,14 @@ export class Phone {
   }
 
   // Входящий звонок от сюжета
-  ring(from, script, { onDecline } = {}) {
+  // stale() — звонок уже неактуален (например, Марк сам пришёл в «Подвал»): тогда не звоним
+  ring(from, script, { onDecline, stale } = {}) {
+    if (stale?.()) return;
     if (this.scene.busy || this.ringing) {
-      (this.queue ||= []).push({ from, script, onDecline });
+      (this.queue ||= []).push({ from, script, onDecline, stale });
       return;
     }
-    this.ringing = { from, script, onDecline };
+    this.ringing = { from, script, onDecline, stale };
     this.incoming = true;
     if (!this.open) this.show('call', from);
     else this.go('call', from);
@@ -611,7 +688,7 @@ export class Phone {
 
   // Вызывается сценой, когда она освободилась
   flushQueue() {
-    if (!this.queue?.length || this.scene.busy || this.ringing) return;
+    if (!this.queue?.length || this.scene.busy || this.ringing || this.scene.leaving) return;
     const next = this.queue.shift();
     this.ring(next.from, next.script, next);
   }
@@ -765,14 +842,16 @@ export class Phone {
   async page_player() {
     this.header('ПЛЕЕР', 0xff3d8a);
     const token = (this.playerToken = (this.playerToken || 0) + 1);
-    const demos = await listDemos();
+    // Новые демки — сверху; список листается (колёсико, ▲▼, стрелки)
+    const demos = (await listDemos()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     if (token !== this.playerToken || this.page !== 'player') return;
     this.demos = demos;
     if (!demos.length) {
       this.text(SW / 2, 140, 'Демок пока нет.\nЗапиши трек у Дэна.', { color: '#77729a', align: 'center', fontSize: '13px' }).setOrigin(0.5);
       return;
     }
-    demos.slice(0, 6).forEach((d, i) => {
+    const per = 6;
+    demos.slice(this.offset || 0, (this.offset || 0) + per).forEach((d, i) => {
       const y = 54 + i * 44;
       const playing = this.playingId === d.id;
       this.row(y, 40, () => {
@@ -781,6 +860,8 @@ export class Phone {
       }, () => this.toggleDemo(d));
     });
     this.lyric = this.text(SW / 2, SH - 70, '', { fontSize: '13px', color: '#ffffff', fontStyle: 'bold', align: 'center', wordWrap: { width: SW - 20 } }).setOrigin(0.5);
+    this.scrollMax = Math.max(0, demos.length - per);
+    this.scrollBar();
     this.highlight();
   }
 
@@ -828,16 +909,20 @@ export class Phone {
     this.recLabel = this.text(SW / 2, 156, rec ? 'Запись… (до 20 сек)' : 'Нажми, чтобы записать мысль', { fontSize: '12px', color: '#a9a6c8' }).setOrigin(0.5, 0);
     if (rec) this.scene.tweens.add({ targets: btn, alpha: 0.6, duration: 400, yoyo: true, repeat: -1 });
     const token = (this.memoToken = (this.memoToken || 0) + 1);
-    const memos = await dbAll('memos');
+    const memos = (await dbAll('memos')).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     if (token !== this.memoToken || this.page !== 'recorder') return;
-    memos.slice(0, 5).forEach((m, i) => {
+    const per = 5;
+    const off = this.offset || 0;
+    memos.slice(off, off + per).forEach((m, i) => {
       const y = 190 + i * 42;
       this.row(y, 38, () => {
-        this.text(14, y + 10, `▶ Запись ${memos.length - i}`, { fontSize: '13px' });
+        this.text(14, y + 10, `▶ Запись ${memos.length - off - i}`, { fontSize: '13px' });
         this.text(SW - 14, y + 10, `${m.when || ''} · ${Math.round(m.length || 0)} с`, { fontSize: '10px', color: '#a9a6c8' }).setOrigin(1, 0);
       }, () => this.playMemo(m));
     });
     if (!memos.length) this.text(SW / 2, 230, 'Записей нет', { fontSize: '12px', color: '#77729a' }).setOrigin(0.5, 0);
+    this.scrollMax = Math.max(0, memos.length - per);
+    this.scrollBar();
     this.highlight();
   }
 
@@ -912,10 +997,12 @@ export class Phone {
     this.text(14, y, 'ИСТОРИЯ', { fontFamily: PIXEL, fontSize: '7px', color: '#a9a6c8' });
     y += 16;
     if (!state.bank.length) this.text(14, y, 'Операций нет', { fontSize: '12px', color: '#77729a' });
+    // Если список прокручивается — суммы левее, чтобы не прятались под кнопками ▲▼
+    const right = state.bank.length > 10 ? SW - 40 : SW - 14;
     state.bank.slice(this.offset || 0).forEach((tx) => {
       if (y > SH - 24) return;
       this.text(14, y, (tx.label || (tx.amount > 0 ? 'Пополнение' : 'Расход')).slice(0, 22), { fontSize: '12px', color: '#e8e4ff' });
-      this.text(SW - 14, y, `${tx.amount > 0 ? '+' : '−'}${Math.abs(tx.amount).toLocaleString('ru-RU')}`, { fontSize: '12px', color: tx.amount > 0 ? '#8ae6a0' : '#ff6b8a' }).setOrigin(1, 0);
+      this.text(right, y, `${tx.amount > 0 ? '+' : '−'}${Math.abs(tx.amount).toLocaleString('ru-RU')}`, { fontSize: '12px', color: tx.amount > 0 ? '#8ae6a0' : '#ff6b8a' }).setOrigin(1, 0);
       y += 20;
     });
     this.scrollMax = Math.max(0, state.bank.length - 10);
@@ -1014,6 +1101,14 @@ export class Phone {
       { label: 'Скорость текста', value: speed[st.textSpeed] || 'нормально', change: (d) => (st.textSpeed = cycle([40, 22, 10], st.textSpeed, d)) },
       { label: 'Автотюн в студии', value: at[st.autotune], change: (d) => (st.autotune = cycle(['off', 'light', 'hard'], st.autotune, d)) },
       { label: 'Наушники в студии', value: st.headphones ? 'да' : 'нет', change: () => (st.headphones = !st.headphones) },
+      { label: 'Телефон', value: phoneX() < 200 ? 'слева' : phoneX() < 500 ? 'в центре' : 'справа', change: (d) => {
+        const spots = [20, 335, PX];
+        const cur = spots.reduce((best, x) => (Math.abs(x - phoneX()) < Math.abs(best - phoneX()) ? x : best), PX);
+        st.phoneX = spots[(spots.indexOf(cur) + d + spots.length) % spots.length];
+        this.root.x = st.phoneX;
+      } },
+      { label: 'Графика', value: QUALITY_LABEL[st.graphics || 'high'], change: (d) => (st.graphics = cycle(['low', 'medium', 'high'], st.graphics || 'high', d)) },
+      { label: 'Яркость', value: `${Math.round((st.brightness || 1) * 100)}%`, change: (d) => (st.brightness = cycle([0.9, 1, 1.15, 1.3], st.brightness || 1, d)) },
       { label: 'Обои', value: String((state.phone.wallpaper % WALLPAPERS.length) + 1), change: (d) => (state.phone.wallpaper = (state.phone.wallpaper + d + WALLPAPERS.length) % WALLPAPERS.length) },
     ];
   }
@@ -1021,21 +1116,30 @@ export class Phone {
   page_settings() {
     this.header('НАСТРОЙКИ', 0x9a96b8);
     this.settingsRows().forEach((r, i) => {
-      const y = 54 + i * 40;
-      this.row(y, 36, () => {
-        this.text(14, y + 10, r.label, { fontSize: '12px' });
-        const minus = this.text(SW - 98, y + 8, '◀', { fontSize: '13px', color: '#9a96b8' });
-        this.text(SW - 58, y + 10, r.value, { fontSize: '12px', color: '#ffd166' }).setOrigin(0.5, 0);
-        const plus = this.text(SW - 22, y + 8, '▶', { fontSize: '13px', color: '#9a96b8' });
+      // 11 строк — шаг 30 px, чтобы подсказка внизу не налезала
+      const y = 50 + i * 30;
+      this.row(y, 27, () => {
+        this.text(14, y + 8, r.label, { fontSize: '12px' });
+        const minus = this.text(SW - 116, y + 6, '◀', { fontSize: '13px', color: '#9a96b8' });
+        this.text(SW - 64, y + 8, r.value, { fontSize: '12px', color: '#ffd166' }).setOrigin(0.5, 0);
+        const plus = this.text(SW - 22, y + 6, '▶', { fontSize: '13px', color: '#9a96b8' });
         minus.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.changeSetting(i, -1));
         plus.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.changeSetting(i, 1));
       }, () => this.changeSetting(i, 1));
     });
-    this.text(SW / 2, SH - 20, '← → менять', { fontSize: '10px', color: '#77729a' }).setOrigin(0.5, 0);
+    this.text(SW / 2, SH - 26, '← → менять · [ ] — сдвинуть телефон', { fontSize: '10px', color: '#77729a' }).setOrigin(0.5, 0);
+    this.text(SW / 2, SH - 13, 'или тяни его за рамку', { fontSize: '10px', color: '#77729a' }).setOrigin(0.5, 0);
   }
 
   changeSetting(i, d) {
+    const before = state.settings.graphics;
     this.settingsRows()[i].change(d);
+    if (state.settings.graphics !== before) {
+      // Плёночный эффект — сразу; остальное (облака, передний план, частицы) — со следующей локации
+      this.scene.children.list.filter((o) => o.depth === 985 || o.depth === 986).forEach((o) => o.destroy());
+      applyLook(this.scene);
+      this.scene.showToast?.('ГРАФИКА', `${QUALITY_LABEL[state.settings.graphics]} — полностью со следующей локации`, '#9a96b8');
+    }
     applySettings();
     saveSettings();
     sfx('tap');
@@ -1055,6 +1159,9 @@ export class Phone {
       return;
     }
     if (k === 'p' || k === 'з' || k === 'P' || k === 'З') return this.hide();
+    // [ и ] — сдвинуть телефон влево/вправо (в русской раскладке — х и ъ)
+    if (['[', 'х', 'Х', '{'].includes(k)) return this.moveBy(-110);
+    if ([']', 'ъ', 'Ъ', '}'].includes(k)) return this.moveBy(110);
     if (k === 'Escape' || k === 'Backspace' || k === 'q' || k === 'й') return this.back();
     if (this.page === 'camera') {
       if (['Enter', ' ', 'e', 'у'].includes(k)) this.snap();
@@ -1119,6 +1226,47 @@ export class Phone {
     this.offset = keep;
   }
 
+  // ---------- Положение телефона ----------
+
+  // Перетаскивание за рамку (верх и низ корпуса), мышью или пальцем
+  makeDrag() {
+    const s = this.scene;
+    const handles = [s.add.rectangle(0, 0, PW, SY - 2, 0xffffff, 0.001).setOrigin(0), s.add.rectangle(0, SY + SH + 2, PW, PH - SY - SH - 30, 0xffffff, 0.001).setOrigin(0)];
+    handles.forEach((h) => {
+      h.setInteractive({ useHandCursor: true, draggable: true });
+      this.root.add(h);
+      h.on('dragstart', (pointer) => {
+        this.dragFrom = { px: pointer.x, x: this.root.x };
+      });
+      h.on('drag', (pointer) => {
+        if (!this.dragFrom) return;
+        this.root.x = clampX(this.dragFrom.x + (pointer.x - this.dragFrom.px));
+      });
+      h.on('dragend', () => {
+        this.dragFrom = null;
+        this.savePos();
+      });
+    });
+    this.root.sendToBack?.(handles[0]);
+  }
+
+  moveBy(dx) {
+    const s = this.scene;
+    const x = clampX(this.root.x + dx);
+    if (x === this.root.x) return sfx('deny');
+    sfx('tap');
+    s.tweens.add({ targets: this.root, x, duration: 160, ease: 'Cubic.out', onComplete: () => this.savePos() });
+  }
+
+  savePos() {
+    state.settings.phoneX = Math.round(this.root.x);
+    saveSettings();
+  }
+
+  overPhone(pointer) {
+    return pointer.x >= this.root.x && pointer.x <= this.root.x + PW && pointer.y >= this.root.y && pointer.y <= this.root.y + PH;
+  }
+
   // ---------- Уведомления ----------
 
   onEvent(ev) {
@@ -1146,9 +1294,22 @@ export class Phone {
     });
   }
 
+  // Баннер не должен закрывать диалог, тетрадь, комп и сам телефон
+  flushBanners() {
+    const s = this.scene;
+    if (!this.bannerQueue.length || s.notebook?.open || s.pc?.open || s.closeup || this.open) return;
+    this.showBanner(this.bannerQueue.shift());
+  }
+
   showBanner(ev) {
     const { app, title, text } = ev;
     const s = this.scene;
+    if (s.notebook?.open || s.pc?.open || s.closeup || this.open) {
+      // Сейчас некуда — покажем, когда закроется (не больше трёх в очереди)
+      this.bannerQueue.push(ev);
+      if (this.bannerQueue.length > 3) this.bannerQueue.shift();
+      return;
+    }
     const appDef = APPS.find((a) => a.id === app) || APPS[1];
     const b = this.banner;
     s.tweens.killTweensOf(b);
@@ -1161,13 +1322,16 @@ export class Phone {
     const str = String(text);
     const t2 = s.add.text(x + 56, 26, str.length > 34 ? `${str.slice(0, 33)}…` : str, { fontFamily: FONT, fontSize: '14px', color: '#ffffff' });
     b.add([bg, ic, t1, t2]);
-    b.y = -70;
+    // Во время диалога (окно сверху) баннер выезжает под ним; иначе — под кнопками телефона и тетради
+    const top = s.dialogue?.active ? 34 + (s.dialogue.box?.height || 156) + 12 : 64;
+    b.y = top - 82;
+    b.setAlpha(1);
     // Вибрация: баннер дрожит
     s.tweens.add({
-      targets: b, y: 12, duration: 300, ease: 'Back.out',
+      targets: b, y: top, duration: 300, ease: 'Back.out',
       onComplete: () => s.tweens.add({ targets: b, x: { from: -3, to: 3 }, duration: 40, yoyo: true, repeat: 4, onComplete: () => (b.x = 0) }),
     });
-    s.tweens.add({ targets: b, y: -70, delay: 3600, duration: 300, ease: 'Cubic.in' });
+    s.tweens.add({ targets: b, alpha: 0, delay: 3600, duration: 300, ease: 'Cubic.in' });
     bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
       if (s.busy) return;
       if (app === 'messages' && ev.from) this.show('thread', ev.from);
@@ -1189,6 +1353,16 @@ function dayName() {
     return 'ВТОРНИК';
   }
   return 'ПОНЕДЕЛЬНИК';
+}
+
+// Где стоит телефон: по умолчанию справа; запоминается в настройках
+export function phoneX() {
+  const x = state.settings?.phoneX;
+  return typeof x === 'number' ? clampX(x) : PX;
+}
+
+function clampX(x) {
+  return Phaser.Math.Clamp(Math.round(x), 8, 960 - PW - 12);
 }
 
 function clamp01(v) {
@@ -1213,6 +1387,9 @@ export function applySettings() {
   setVolumes({ music: st.music, sfx: st.sfx });
   voiceSettings.enabled = st.voice;
   voiceSettings.volume = st.voiceVol;
+  // Яркость — фильтром холста: одинаково в WebGL и Canvas, ничего не перерисовывая
+  const canvas = window.game?.canvas;
+  if (canvas) canvas.style.filter = st.brightness && st.brightness !== 1 ? `brightness(${st.brightness})` : '';
   phoneChanged();
 }
 

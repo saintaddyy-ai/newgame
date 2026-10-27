@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { state } from '../state.js';
 import { sfx } from '../audio.js';
 import { castKey } from '../story/episode2/people.js';
+import { chaseTextures } from '../gfx/places/scenes.js';
+import { addActor, walk as actorWalk } from '../gfx/actors.js';
 
 const GROUND = 440;
 const FONT = '"PT Mono", monospace';
@@ -26,16 +28,18 @@ export class ChaseScene extends Phaser.Scene {
     this.cameras.main.fadeIn(300, 7, 6, 13);
 
     // Фон: дворы, гаражи, окна — едут с разной скоростью
-    this.far = this.add.tileSprite(0, 0, 960, 540, this.makeLayer('chase_far', 0x15102a, 0x221c38, 0xffd27a)).setOrigin(0);
-    this.near = this.add.tileSprite(0, 200, 960, 260, this.makeLayer('chase_near', 0x2c2638, 0x3a3f4a, 0x4a505c, 260)).setOrigin(0);
-    this.add.rectangle(0, GROUND, 960, 100, 0x2b2b33).setOrigin(0);
-    this.ground = this.add.tileSprite(0, GROUND, 960, 20, this.makeStripes()).setOrigin(0);
+    chaseTextures(this);
+    this.far = this.add.tileSprite(0, 0, 480, 270, 'chase2_far').setOrigin(0).setScale(2);
+    this.near = this.add.tileSprite(0, GROUND - 280, 480, 140, 'chase2_near').setOrigin(0).setScale(2);
+    this.ground = this.add.tileSprite(0, GROUND, 480, 40, 'chase2_ground').setOrigin(0).setScale(2);
 
-    this.mark = this.add.sprite(420, GROUND, 'mark_0').setOrigin(0.5, 1).play('mark_walk');
-    this.mark.anims.timeScale = 2.2;
+    this.mark = addActor(this, 420, GROUND, 'mark');
+    actorWalk(this.mark);
+    this.mark.anims.timeScale = 1.7;
     const cop = castKey(this, 'cop');
-    this.cop = this.add.sprite(420 - this.gap, GROUND, `${cop}_0`).setOrigin(0.5, 1).play(`${cop}_walk`);
-    this.cop.anims.timeScale = 2.2;
+    this.cop = addActor(this, 420 - this.gap, GROUND, cop);
+    actorWalk(this.cop);
+    this.cop.anims.timeScale = 1.7;
     this.siren = this.add.rectangle(0, 0, 960, 540, 0x3a5aff, 0).setOrigin(0).setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({ targets: this.siren, fillAlpha: 0.12, duration: 300, yoyo: true, repeat: -1 });
     sfx('siren');
@@ -57,39 +61,10 @@ export class ChaseScene extends Phaser.Scene {
     this.events.once('shutdown', () => this.sirenLoop?.remove());
   }
 
-  makeLayer(key, sky, a, b, h = 540) {
-    if (this.textures.exists(key)) return key;
-    const g = this.make.graphics({}, false);
-    g.fillStyle(sky, 1).fillRect(0, 0, 960, h);
-    for (let x = 0; x < 960; x += 160) {
-      g.fillStyle(a, 1).fillRect(x, h * 0.3, 150, h * 0.7);
-      g.fillStyle(b, 1).fillRect(x + 10, h * 0.4, 130, h * 0.6);
-      for (let y = h * 0.45; y < h - 20; y += 24) g.fillStyle(0x000000, 0.15).fillRect(x + 10, y, 130, 3);
-    }
-    g.generateTexture(key, 960, h);
-    g.destroy();
-    return key;
-  }
-
-  makeStripes() {
-    if (this.textures.exists('chase_ground')) return 'chase_ground';
-    const g = this.make.graphics({}, false);
-    g.fillStyle(0x3a3a48, 1).fillRect(0, 0, 960, 20);
-    for (let x = 0; x < 960; x += 80) g.fillStyle(0x4a4a58, 1).fillRect(x, 4, 40, 6);
-    g.generateTexture('chase_ground', 960, 20);
-    g.destroy();
-    return 'chase_ground';
-  }
-
   spawn() {
     if (this.done) return;
-    const kinds = [
-      { w: 44, h: 36, color: 0xc89a5a },
-      { w: 70, h: 22, color: 0x6a6a7a },
-      { w: 30, h: 56, color: 0x3a6a3a },
-    ];
-    const k = Phaser.Utils.Array.GetRandom(kinds);
-    const o = this.add.rectangle(1000, GROUND, k.w, k.h, k.color).setOrigin(0.5, 1).setStrokeStyle(2, 0x0c0a16);
+    const k = Phaser.Utils.Array.GetRandom(['box', 'bin', 'cone', 'barrier']);
+    const o = this.add.image(1000, GROUND + 2, `chase2_${k}`).setOrigin(0.5, 1).setScale(2);
     o.hit = false;
     this.obstacles.push(o);
   }
@@ -113,9 +88,9 @@ export class ChaseScene extends Phaser.Scene {
   update(time, dt) {
     if (this.done) return;
     const s = dt / 1000;
-    this.far.tilePositionX += this.speed * 0.2 * s;
-    this.near.tilePositionX += this.speed * 0.5 * s;
-    this.ground.tilePositionX += this.speed * s;
+    this.far.tilePositionX += (this.speed * 0.1 * s) / 2;
+    this.near.tilePositionX += (this.speed * 0.5 * s) / 2;
+    this.ground.tilePositionX += (this.speed * s) / 2;
     // Прыжок
     this.vy += 1900 * s;
     this.mark.y = Math.min(GROUND, this.mark.y + this.vy * s);
@@ -123,7 +98,7 @@ export class ChaseScene extends Phaser.Scene {
     // Препятствия
     for (const o of this.obstacles) {
       o.x -= this.speed * s;
-      if (!o.hit && Math.abs(o.x - this.mark.x) < o.width / 2 + 14 && this.mark.y > GROUND - o.height) {
+      if (!o.hit && Math.abs(o.x - this.mark.x) < o.displayWidth / 2 + 14 && this.mark.y > GROUND - o.displayHeight) {
         o.hit = true;
         this.gap -= 70;
         sfx('crash');

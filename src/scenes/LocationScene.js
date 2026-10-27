@@ -4,12 +4,21 @@ import { Notebook } from '../ui/Notebook.js';
 import { DemoPC } from '../ui/DemoPC.js';
 import { Phone } from '../ui/Phone.js';
 import { uiContainer } from '../ui/pin.js';
+import { Panel, keyCap } from '../ui/frame.js';
 import { state, addLine, TAGS, ITEMS, giveItem, saveGame, bankTx } from '../state.js';
-import { getLocation, phaseLabel, advanceTime, useItem, sceneHooks } from '../story/index.js';
+import { getLocation, phaseLabel, advanceTime, useItem, sceneHooks, acidActive } from '../story/index.js';
 import { sfx, startAmbience, stopAmbience, currentMusic, BEAT } from '../audio.js';
 import { unreadTotal } from '../phone/model.js';
 import { repaintMark } from '../story/episode2/look.js';
 import * as phoneApi from '../phone/model.js';
+import { addActor, idle, walk, talk, pose, play, gesture, startBlinks, isWalking } from '../gfx/actors.js';
+import { USE_POSE, makeMirror, mirrorCloseup, fridgeOpen, lieDown, standUp, shower, rideCloseup, npcLife } from '../gfx/actions.js';
+import { lightSprite } from '../gfx/world.js';
+import { buildDoor, swingDoor } from '../gfx/doors.js';
+import { rain, fog, snow, dust } from '../gfx/weather.js';
+import { leaves, steam, distantWalkers, skyBirds } from '../gfx/life.js';
+import { applyLook, aberration } from '../gfx/fx.js';
+import { walkFactor, remark, food as addFood, clean as addClean, needsOn, FOOD_LOW, FOOD_WEAK, CLEAN_LOW, CLEAN_BAD } from '../needs.js';
 
 export const FLOOR = 470;
 const SPEED = 260;
@@ -17,6 +26,25 @@ const USE_RANGE = 80;
 const STEP_EVERY = 300;
 const SNEAK_SPEED = 110;
 const val = (v) => (typeof v === 'function' ? v() : v);
+const NEED_W = 46;
+
+// Значки самочувствия 7×7: молния (силы), миска (сытость), капля (чистота)
+function needIcons(scene) {
+  if (scene.textures.exists('need_clean')) return;
+  const draw = (key, rows, colors) => {
+    const c = scene.textures.createCanvas(key, 7, 7);
+    const g = c.getContext();
+    rows.forEach((row, y) => [...row].forEach((ch, x) => {
+      if (ch === '.') return;
+      g.fillStyle = colors[ch];
+      g.fillRect(x, y, 1, 1);
+    }));
+    c.refresh();
+  };
+  draw('need_energy', ['...aa..', '..aa...', '.aaaaa.', '...aa..', '..aa...', '.aa....', '.a.....'], { a: '#ffd166' });
+  draw('need_food', ['.s.s.s.', '..s.s..', 'aaaaaaa', 'abbbbba', '.abbba.', '..aaa..', '.......'], { a: '#f0c060', b: '#c07a30', s: '#d8d8e8' });
+  draw('need_clean', ['...a...', '..aaa..', '.aabaa.', '.abaaa.', 'aaaaaaa', '.aaaaa.', '..aaa..'], { a: '#6ad8ff', b: '#e8f8ff' });
+}
 
 // Универсальная локация: фон, двери, герой, NPC и предметы описываются в story/*.js
 export class LocationScene extends Phaser.Scene {
@@ -40,7 +68,21 @@ export class LocationScene extends Phaser.Scene {
     this.stepTimer = 0;
     this.lastPrompt = null;
     this.sneaking = false;
+    this.turning = false;
+    this.__texting = false;
     this.zonesFired = new Set();
+    this.autoLights = undefined;
+    this.lightEnv = undefined;
+    this.doorSpots = {};
+    // Поля, которые заводят рисовальщики конкретных локаций, — от прошлой локации ничего не остаётся
+    this.mirrorRect = null;
+    this.speakers = null;
+    this.screen = null;
+    this.bulbLight = null;
+    this.toastUntil = 0;
+    this.toastQueue = [];
+    this.steamSpots = [];
+    this.__actors = new Set();
     const cfg = this.cfg;
 
     this.cameras.main.setBounds(0, 0, cfg.width, 540);
@@ -59,37 +101,54 @@ export class LocationScene extends Phaser.Scene {
       // dynamic: человек может прийти или уйти, пока Марк здесь (время идёт) — спрайт создаём всегда
       const here = !n.when || n.when();
       if (!here && !n.dynamic) return;
-      const s = this.add.sprite(n.x, FLOOR + (n.dy || 0), `${n.sprite}_0`).setOrigin(0.5, 1).setDepth(n.depth ?? 10);
-      s.setFlipX(!!n.flip);
-      if (n.scale) s.setScale(n.scale);
+      const s = addActor(this, n.x, FLOOR + (n.dy || 0), n.sprite, { flip: !!n.flip, scale: n.scale || 1, depth: n.depth ?? 10 });
+      if (n.pose) {
+        s.__pose = n.pose;
+        pose(s, n.pose);
+      }
       s.setVisible(here);
       this.npcs[n.id] = s;
-      this.tweens.add({ targets: s, scaleY: (n.scale || 1) * 1.015, duration: 1400 + Math.random() * 400, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     });
 
-    this.player = this.add.sprite(spawnX ?? cfg.spawnX, FLOOR, 'mark_0').setOrigin(0.5, 1).setDepth(20);
-    this.player.setFlipX(facing === 'left');
+    this.player = addActor(this, spawnX ?? cfg.spawnX, FLOOR, 'mark', { depth: 20, flip: facing === 'left' });
+    this.blinks = startBlinks(this, () => [this.player, ...Object.values(this.npcs)]);
+    this.mirror = makeMirror(this);
+    this.npcLifeEvent = npcLife(this);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12, 0, 40);
 
     if (cfg.foreground) cfg.foreground(this);
-    if (val(cfg.rain)) this.makeRain();
+    // Погода и жизнь вокруг
+    const wet = val(cfg.rain);
+    if (wet) rain(this, { heavy: wet === 'heavy' });
+    const wx = val(cfg.weather) || this.defaultWeather();
+    if (wx === 'fog') fog(this);
+    if (wx === 'snow') snow(this);
+    if (wx === 'dust') dust(this, cfg.width);
+    if (this.lightEnv?.outdoor) {
+      if (!wet && (this.lightEnv.dark ?? 0) < 0.6) leaves(this, cfg.width);
+      if ((this.lightEnv.dark ?? 0) < 0.5) skyBirds(this);
+      if (cfg.width > 1200) distantWalkers(this, cfg.width, { n: 2 });
+    }
+    if (this.steamSpots?.length) steam(this, this.steamSpots);
+    applyLook(this);
     // Ночь — синее затемнение поверх мира, свет ламп остаётся
     const night = val(cfg.night);
-    this.isNight = !!night;
-    if (night) this.add.rectangle(0, 0, cfg.width, 540, 0x0a0824, night === true ? 0.42 : night).setOrigin(0).setDepth(30);
-    this.makeLights(val(cfg.lamps) || [], !!night);
+    this.isNight = !!night || (this.lightEnv?.dark ?? 0) > 0.5;
+    // Новые фоны уже нарисованы под время суток; старым — синее затемнение
+    if (night && !this.lightEnv) this.add.rectangle(0, 0, cfg.width, 540, 0x0a0824, night === true ? 0.42 : night).setOrigin(0).setDepth(30);
+    this.makeLights(this.autoLights ?? (val(cfg.lamps) || []), !!night || (this.lightEnv?.dark ?? 0) > 0.3);
+    this.makeShadows();
     this.makeCritters(val(cfg.critters) || []);
     this.acidFx = null;
 
     // Подсказка над предметом
     this.prompt = this.add.container(0, 0).setDepth(900).setVisible(false);
-    const key = this.add.rectangle(0, 0, 26, 26, 0xffd166).setStrokeStyle(2, 0x0c0a16);
-    const keyT = this.add.text(0, 0, 'E', { fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#0c0a16' }).setOrigin(0.5);
-    this.promptLabel = this.add.text(20, 0, '', {
-      fontFamily: '"PT Mono", monospace', fontSize: '18px', color: '#ffffff', stroke: '#0c0a16', strokeThickness: 5,
+    const key = keyCap(this, 0, 0, 'E', { size: 24 });
+    this.promptBg = this.add.rectangle(16, 0, 10, 28, 0x0c0a16, 0.78).setOrigin(0, 0.5).setStrokeStyle(2, 0x0b0912);
+    this.promptLabel = this.add.text(24, 0, '', {
+      fontFamily: '"PT Mono", monospace', fontSize: '17px', color: '#ffffff',
     }).setOrigin(0, 0.5);
-    this.prompt.add([key, keyT, this.promptLabel]);
-    this.tweens.add({ targets: this.prompt, y: '-=4', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+    this.prompt.add([this.promptBg, key, this.promptLabel]);
 
     const title = this.add.text(480, 250, val(cfg.title), {
       fontFamily: '"Press Start 2P"', fontSize: '20px', color: '#ffffff', stroke: '#ff3d8a', strokeThickness: 6,
@@ -97,21 +156,19 @@ export class LocationScene extends Phaser.Scene {
     this.tweens.add({ targets: title, alpha: 1, duration: 600, hold: 1600, yoyo: true });
 
     this.dialogue = new Dialogue(this);
-    // Тот, кто говорит, чуть подпрыгивает — видно, чья реплика; на крик — сильнее
-    this.dialogue.onSpeak = (name, emo) => {
+    // Тот, кто говорит, жестикулирует и шевелит губами; на крик — ещё и вздрагивает
+    this.dialogue.onSpeak = (name, emo, text = '') => {
       const def = this.npcDefs.find((n) => n.name === name && this.npcs[n.id]?.visible);
       const spr = def ? this.npcs[def.id] : name === 'Марк' ? this.player : null;
-      if (!spr || spr.__hop) return;
-      spr.__hop = true;
-      const h = emo === 'shout' ? 14 : 6;
-      const y0 = spr.y;
-      this.tweens.add({
-        targets: spr, y: y0 - h, duration: emo === 'shout' ? 70 : 110, yoyo: true, repeat: emo === 'shout' ? 2 : 0,
-        onComplete: () => {
-          spr.y = y0;
-          spr.__hop = false;
-        },
-      });
+      if (!spr || isWalking(spr)) return;
+      talk(spr);
+      spr.__talkUntil = this.time.now + Math.min(3200, 500 + text.length * 38);
+      if (emo === 'shout') this.cameras.main.shake(140, 0.0025);
+      if (emo === 'shout' && !spr.__hop) {
+        spr.__hop = true;
+        const y0 = spr.y;
+        this.tweens.add({ targets: spr, y: y0 - 6, duration: 70, yoyo: true, repeat: 2, onComplete: () => { spr.y = y0; spr.__hop = false; } });
+      }
     };
     this.notebook = new Notebook(this);
     this.notebook.onUse = (id) => {
@@ -151,7 +208,13 @@ export class LocationScene extends Phaser.Scene {
       this.acidTween?.stop();
       this.acidTrail?.remove();
     });
-    if (state.flags.acidNow) this.setAcid(true);
+    // Кислотный эффект — только пока марочка действует; сверяемся с состоянием постоянно
+    if (acidActive()) this.setAcid(true);
+    this.time.addEvent({ delay: 500, loop: true, callback: () => {
+      if (this.leaving) return;
+      const want = acidActive();
+      if (want !== !!this.acidFx) this.setAcid(want);
+    } });
     // Эпизод может добавить в локацию живых людей, события по времени и т. п.
     sceneHooks(this);
     cfg.setup?.(this);
@@ -188,24 +251,59 @@ export class LocationScene extends Phaser.Scene {
       phone: { ...phoneApi, ring: (from, script, opts) => this.phone.ring(from, script, opts), open: (page, arg) => this.phone.show(page, arg) },
       time: (min) => advanceTime(this, min),
       toast: (title, text, color) => this.showToast(title, text, color),
+      // Анимации: anim('eat', 1200) — герой; anim('smoke', 2000, 'palych') — NPC
+      anim: (name, ms = 900, who) => gesture(this, who ? this.npcs[who] : this.player, name, ms),
+      lieDown: (x) => lieDown(this, x ?? this.player.x),
+      standUp: () => standUp(this),
+      shower: (x) => shower(this, x ?? this.player.x),
+      ride: () => rideCloseup(this),
+      mirror: () => mirrorCloseup(this),
+      // Поесть: анимация, сытость (+энергия в Эп.2). Помыться: душ или раковина
+      eat: async (amount, { ms = 1400, energy: en = 0 } = {}) => {
+        this.dialogue.close();
+        await gesture(this, this.player, 'eat', ms);
+        addFood(amount);
+        if (en) state.energy = Math.min(100, state.energy + en);
+        this.refreshHud();
+        this.bumpNeed('food');
+      },
+      wash: async (amount = 100, { full = true } = {}) => {
+        this.dialogue.close();
+        if (full) await shower(this, this.player.x);
+        else await gesture(this, this.player, 'wash', 1600);
+        addClean(amount);
+        this.refreshHud();
+        this.bumpNeed('clean');
+      },
+      food: (d) => {
+        addFood(d);
+        this.refreshHud();
+      },
+      dirt: (d) => {
+        addClean(-d);
+        this.refreshHud();
+      },
     };
   }
 
-  async runScript(fn, { cost = 0 } = {}) {
+  async runScript(fn, { cost = 0, pose: usePose, cleanup } = {}) {
     this.phone.deferRinging();
     if (this.phone.open) this.phone.hide(true);
     this.busy = true;
     this.prompt.setVisible(false);
-    this.player.anims.stop();
-    this.player.setTexture('mark_0');
+    idle(this.player);
+    // Пока идёт сценарий у предмета — герой что-то с ним делает (смотрит, тянется, умывается)
+    if (usePose) play(this.player, usePose, true);
     try {
       await fn(this.ctx);
     } catch (e) {
       console.error(e);
     } finally {
+      cleanup?.();
       if (this.scene.isActive() && !this.leaving) {
         this.dialogue.close();
         this.hideCloseup();
+        if (usePose && !this.player.__pose) idle(this.player);
         this.busy = false;
         this.useCooldown = this.time.now + 400;
         if (cost) advanceTime(this, cost);
@@ -249,7 +347,7 @@ export class LocationScene extends Phaser.Scene {
     if (!it) return;
     sfx(it.sfx || 'click');
     // Маленькая вспышка на месте предмета — отклик на каждое действие
-    this.fx.ping(it.x, it.npc ? FLOOR - 120 : (it.y ?? FLOOR - 190) + 40);
+    this.fx.ping(it.x, it.npc ? FLOOR - 100 : (it.y ?? FLOOR - 160) + 40);
     if (it.npc) {
       // Отходим на шаг, чтобы не стоять внутри собеседника
       const side = this.player.x < it.npc.x ? -1 : 1;
@@ -258,20 +356,69 @@ export class LocationScene extends Phaser.Scene {
       this.player.setFlipX(it.npc.x < tx);
       it.npc.setFlipX(tx < it.npc.x);
     }
-    this.runScript(it.use, { cost: state.episode === 'ep2' ? it.cost ?? 0 : 0 });
+    // Если от Марка пахнет — собеседник сначала скажет об этом (раз в день)
+    if (it.npc) {
+      const npcId = it.key.slice(4);
+      const r = remark(npcId);
+      if (r) {
+        const run = it.use;
+        const name = this.npcDefs.find((n) => n.id === npcId)?.name;
+        return this.runScript(async (ctx) => {
+          await ctx.d.say(name || it.label.replace(/^Поговорить: /, ''), r);
+          await run(ctx);
+        }, { cost: state.episode === 'ep2' ? it.cost ?? 0 : 0 });
+      }
+    }
+    let usePose = it.npc ? null : it.pose ?? USE_POSE[it.sfx];
+    let cleanup = null;
+    if (!it.npc) this.player.setFlipX(it.x < this.player.x - 4);
+    if (it.sfx === 'fridge') cleanup = fridgeOpen(this, it.x);
+    // Зеркало дома и в ванной — крупный план с отражением
+    const mr = this.mirrorRect;
+    if (mr && (it.sfx === 'mirror' || it.sfx === 'water') && Math.abs(it.x - (mr.x + mr.w / 2)) < 120) {
+      const run = it.use;
+      return this.runScript(async (ctx) => {
+        ctx.mirror();
+        await run(ctx);
+      }, { cost: state.episode === 'ep2' ? it.cost ?? 0 : 0, pose: usePose, cleanup });
+    }
+    this.runScript(it.use, { cost: state.episode === 'ep2' ? it.cost ?? 0 : 0, pose: usePose, cleanup });
   }
 
   update(time, dt) {
     const free = !this.busy && !this.pc.open && !this.phone.open;
+    // Договорил — снова просто стоит
+    [this.player, ...Object.values(this.npcs)].forEach((s) => {
+      if (s.__talkUntil && time > s.__talkUntil) {
+        s.__talkUntil = 0;
+        if ((s.anims.currentAnim?.key || '').endsWith('@talk')) idle(s);
+      }
+    });
     this.hud.setVisible(!this.busy && !this.pc.open);
     this.phoneBtn.setVisible(!this.busy && !this.pc.open && !this.phone.open);
     this.info.setVisible(state.episode !== 'prologue' && !this.busy && !this.pc.open);
     this.heatBar?.setVisible(free && state.flags.courierActive);
     this.updateDoors();
+    this.updateActorsLight();
+    // Открыл телефон — смотрит в экран
+    if (this.phone.open && !this.busy && !this.__texting) {
+      this.__texting = true;
+      pose(this.player, 'text');
+    } else if (!this.phone.open && this.__texting) {
+      this.__texting = false;
+      if (!this.busy) idle(this.player);
+    }
     this.pulseToBeat();
     this.cfg.tick?.(this, dt);
     if (!this.busy) this.phone.flushQueue();
-    if (this.busy || this.notebook.open || this.pc.open || this.phone.open) return;
+    this.phone.flushBanners();
+    // Голодный обморок — после того, как закончится текущая сцена
+    if (state.flags.nd_dead && !this.busy && !this.leaving) return this.gameOver(state.flags.nd_dead);
+    if (this.busy || this.notebook.open || this.pc.open || this.phone.open) {
+      this.prompt.setVisible(false);
+      this.lastPrompt = null;
+      return;
+    }
 
     const k = this.keys;
     const left = k.left.isDown || k.a.isDown || this.touch.left;
@@ -279,22 +426,33 @@ export class LocationScene extends Phaser.Scene {
     const dir = (right ? 1 : 0) - (left ? 1 : 0);
     // Shift зажат — Марк крадётся (и стоя тоже не привлекает внимания)
     this.setSneak(k.shift.isDown);
-    if (dir) {
-      const speed = this.sneaking ? SNEAK_SPEED : SPEED;
+    // Разворот: короткий кадр «анфас», когда меняем направление
+    if (dir && (dir < 0) !== this.player.flipX && !this.turning) {
+      this.turning = true;
+      pose(this.player, 'turn');
+      this.time.delayedCall(70, () => {
+        this.turning = false;
+        this.player.setFlipX(dir < 0);
+      });
+    }
+    // Долго идёшь в одну сторону — Марк разгоняется (широкие дворы и улицы проходятся быстрее)
+    this.walkHeld = dir && !this.sneaking ? (this.walkHeld || 0) + dt : 0;
+    const boost = 1 + Math.min(0.4, Math.max(0, this.walkHeld - 900) / 1500);
+    if (dir && !this.turning) {
+      const speed = (this.sneaking ? SNEAK_SPEED : SPEED * boost) * walkFactor();
       this.player.x = Phaser.Math.Clamp(this.player.x + dir * speed * (dt / 1000), 40, this.cfg.width - 40);
       this.player.setFlipX(dir < 0);
-      if (!this.player.anims.isPlaying) this.player.play('mark_walk');
-      this.player.anims.timeScale = this.sneaking ? 0.5 : 1;
-      this.stepTimer -= dt;
+      walk(this.player, this.sneaking);
+      this.player.anims.timeScale = boost;
+      this.stepTimer -= dt * boost;
       if (this.stepTimer <= 0) {
         // Крадучись — шагов не слышно
         if (!this.sneaking) sfx(this.cfg.steps || 'stepWood');
         this.stepTimer = this.sneaking ? STEP_EVERY * 1.8 : STEP_EVERY;
         if (val(this.cfg.rain)) this.fx.splash(this.player.x, FLOOR);
       }
-    } else if (this.player.anims.isPlaying) {
-      this.player.anims.stop();
-      this.player.setTexture('mark_0');
+    } else if (isWalking(this.player)) {
+      idle(this.player);
       this.stepTimer = 0;
     }
     this.updateCritters();
@@ -304,11 +462,13 @@ export class LocationScene extends Phaser.Scene {
     const key = it ? it.key || `${it.label}@${it.x}` : null;
     if (it) {
       if (this.lastPrompt !== key) sfx('prompt');
-      const top = it.npc ? it.npc.y - it.npc.height - 24 : FLOOR - 190;
+      const top = it.npc ? it.npc.y - it.npc.displayHeight * 0.8 - 14 : FLOOR - 160;
       this.prompt.setVisible(true);
       this.prompt.x = it.x - 14;
-      this.prompt.y = it.y ?? top;
+      // Подсказка слегка покачивается
+      this.prompt.y = (it.y ?? top) + Math.sin(time / 160) * 2;
       this.promptLabel.setText(it.label);
+      this.promptBg.setSize(this.promptLabel.width + 18, 28);
       const cam = this.cameras.main;
       const right = cam.scrollX + 960 - 40 - this.promptLabel.width;
       if (this.prompt.x > right) this.prompt.x = right;
@@ -339,11 +499,10 @@ export class LocationScene extends Phaser.Scene {
   setSneak(on) {
     if (on === this.sneaking) return;
     this.sneaking = on;
-    this.player.setScale(1, on ? 0.94 : 1);
-    this.player.setTint(on ? 0x9a96c8 : 0xffffff);
+    if (this.player.anims.isPlaying) walk(this.player, on);
     if (on && !this.sneakHint) {
       this.sneakHint = true;
-      const t = this.add.text(this.player.x, this.player.y - 180, 'тсс…', {
+      const t = this.add.text(this.player.x, this.player.y - 150, 'тсс…', {
         fontFamily: '"PT Mono", monospace', fontSize: '16px', color: '#c9c4ee', fontStyle: 'italic', stroke: '#0c0a16', strokeThickness: 4,
       }).setOrigin(0.5).setDepth(900);
       this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 1200, onComplete: () => t.destroy() });
@@ -361,8 +520,7 @@ export class LocationScene extends Phaser.Scene {
       if (z.when && !z.when()) continue;
       if (z.sneak && this.sneaking) continue;
       this.zonesFired.add(z.id);
-      this.player.anims.stop();
-      this.player.setTexture('mark_0');
+      idle(this.player);
       this.setSneak(false);
       this.runScript(z.run, { cost: z.cost || 0 });
       return true;
@@ -373,50 +531,17 @@ export class LocationScene extends Phaser.Scene {
   // ---------- Двери ----------
 
   makeDoor(d) {
-    const h = d.h || 200;
-    const w = d.w || 76;
-    const top = FLOOR - h;
-    const c = this.add.container(d.x - w / 2, top).setDepth(5);
-    const parts = [];
-    if (d.interior) {
-      // Межкомнатная дверь: светлый наличник, за створкой видна соседняя комната, на полу порожек
-      parts.push(this.add.rectangle(-8, -10, w + 16, h + 10, 0x9a7650).setOrigin(0));
-      parts.push(this.add.rectangle(-8, -10, w + 16, 4, 0xb89068).setOrigin(0));
-      parts.push(this.add.rectangle(0, 0, w, h, d.inside ?? 0x4f4766).setOrigin(0));
-      parts.push(this.add.rectangle(0, h * 0.55, w, h * 0.45, Phaser.Display.Color.ValueToColor(d.inside ?? 0x4f4766).lighten(8).color).setOrigin(0));
-      parts.push(this.add.rectangle(0, h - 14, w, 14, d.insideFloor ?? 0x3a2c24).setOrigin(0));
-      parts.push(this.add.rectangle(-4, h - 4, w + 8, 4, 0xb89068).setOrigin(0));
-    } else {
-      parts.push(this.add.rectangle(-5, -5, w + 10, h + 5, d.frame ?? 0x1e1626).setOrigin(0));
-      parts.push(this.add.rectangle(0, 0, w, h, 0x0c0a12).setOrigin(0));
-    }
-    const panel = this.add.container(0, 0);
-    const color = d.color ?? 0x5a3a2a;
-    const dark = Phaser.Display.Color.ValueToColor(color).darken(15).color;
-    panel.add(this.add.rectangle(0, 0, w, h, color).setOrigin(0));
-    if (d.metal) {
-      for (let y = 8; y < h; y += 14) panel.add(this.add.rectangle(4, y, w - 8, 2, dark).setOrigin(0));
-    } else {
-      panel.add(this.add.rectangle(8, 12, w - 16, h * 0.36, dark).setOrigin(0));
-      panel.add(this.add.rectangle(8, h * 0.5, w - 16, h * 0.42, dark).setOrigin(0));
-      panel.add(this.add.rectangle(w - 14, h * 0.5, 8, 8, 0xd8b040).setOrigin(0));
-    }
-    // Тень на створке — когда дверь повёрнута к нам, она темнее
-    const shade = this.add.rectangle(0, 0, w, h, 0x000000, 1).setOrigin(0).setAlpha(0);
-    panel.add(shade);
-    c.add([...parts, panel]);
-    return { ...d, c, panel, shade, w, open: false };
+    // Геометрию двери (низ проёма, вид, что за ней) задаёт фон локации
+    const spot = this.doorSpots?.[d.id] || {};
+    return buildDoor(this, { ...d, ...spot }, { bottom: spot.bottom ?? FLOOR - 6, dark: this.lightEnv?.dark ?? 0 });
   }
 
   setDoor(door, open, silent = false) {
     if (!door || door.open === open) return;
     door.open = open;
-    if (!silent) sfx(open ? (door.metal ? 'gate' : 'door') : door.interior ? 'doorSoft' : 'doorClose');
-    this.tweens.killTweensOf(door.panel);
-    // Створка «поворачивается» к нам — сжимаем по ширине
-    this.tweens.add({ targets: door.panel, scaleX: open ? 0.14 : 1, duration: open ? 260 : 200, ease: open ? 'Cubic.out' : 'Cubic.in' });
-    this.tweens.add({ targets: door.shade, alpha: open ? 0.45 : 0, duration: open ? 260 : 200 });
-    if (!open && !door.interior) this.cameras.main.shake(80, 0.002);
+    if (!silent) sfx(open ? (door.kind === 'gate' ? 'gate' : 'door') : door.kind === 'interior' || door.kind === 'bath' ? 'doorSoft' : 'doorClose');
+    swingDoor(this, door, open, open ? 280 : 220);
+    if (!open && !door.interior && door.kind !== 'bath') this.time.delayedCall(220, () => this.cameras.main.shake(80, 0.002));
   }
 
   // Межкомнатные двери открываются сами, когда к ним подходит кто угодно
@@ -431,6 +556,59 @@ export class LocationScene extends Phaser.Scene {
   }
 
   // ---------- Свет, живность, фото ----------
+
+  // Тени под ногами у всех персонажей
+  makeShadows() {
+    if (!this.textures.exists('shadow')) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      g.fillStyle(0x07060d, 0.55).fillEllipse(24, 6, 48, 12);
+      g.fillStyle(0x07060d, 0.35).fillEllipse(24, 6, 34, 8);
+      g.generateTexture('shadow', 48, 12);
+      g.destroy();
+    }
+    this.shadows = new Map();
+  }
+
+  shadowOf(s) {
+    let sh = this.shadows.get(s);
+    if (!sh) {
+      sh = this.add.image(s.x, s.y, 'shadow').setDepth((s.depth || 10) - 0.5).setScale(1.1, 1);
+      this.shadows.set(s, sh);
+    }
+    return sh;
+  }
+
+  // Подсветка персонажей от ламп + тени (вытягиваются от ближайшего фонаря)
+  updateActorsLight() {
+    const lights = this.lightEnv?.lights || [];
+    this.shadows.forEach((sh, s) => {
+      if (!s.active) {
+        sh.destroy();
+        this.shadows.delete(s);
+      }
+    });
+    this.__actors.forEach((s) => {
+      if (!s?.active) return;
+      lightSprite(this, s);
+      const sh = this.shadowOf(s);
+      sh.setVisible(s.visible && s.alpha > 0.5);
+      if (!sh.visible) return;
+      const sc = s.scaleX / 2;
+      sh.x = s.x;
+      sh.y = s.y - 2;
+      let lean = 0;
+      if (this.lightEnv?.dark > 0.3) {
+        let best = null;
+        lights.forEach((L) => {
+          const d = Math.abs(L.x - s.x);
+          if (d < L.r * 1.2 && (!best || d < Math.abs(best.x - s.x))) best = L;
+        });
+        if (best) lean = Phaser.Math.Clamp((s.x - best.x) / 3, -40, 40);
+      }
+      sh.x += lean * 0.5;
+      sh.setScale((1.05 + Math.abs(lean) / 40) * sc, sc);
+    });
+  }
 
   // Фонари и окна светятся поверх ночного затемнения
   makeLights(lamps, night) {
@@ -461,13 +639,19 @@ export class LocationScene extends Phaser.Scene {
     list.forEach((c) => {
       if (c.type === 'pigeons') {
         for (let i = 0; i < (c.n || 4); i++) {
-          const p = this.add.sprite(c.x + i * 26 + Phaser.Math.Between(-6, 6), (c.y ?? FLOOR) + 2, 'pigeon_0').setOrigin(0.5, 1).setDepth(12);
+          const p = this.add.sprite(c.x + i * 26 + Phaser.Math.Between(-6, 6), (c.y ?? FLOOR) + 2, 'pigeon_0').setOrigin(0.5, 1).setDepth(12).setScale(2);
           p.setFlipX(Math.random() > 0.5);
-          this.tweens.add({ targets: p, angle: { from: 0, to: 18 }, duration: 220, yoyo: true, repeat: -1, repeatDelay: 500 + Math.random() * 1500, delay: Math.random() * 1000 });
+          // Клюёт: голова вниз-вверх, иногда переходит на шаг
+          p.__peck = this.time.addEvent({ delay: 400 + Math.random() * 900, loop: true, callback: () => {
+            if (!p.active || p.texture.key.startsWith('bird')) return;
+            p.setTexture(p.texture.key === 'pigeon_0' ? 'pigeon_1' : 'pigeon_0');
+            if (Math.random() < 0.15) this.tweens.add({ targets: p, x: p.x + (p.flipX ? -6 : 6), duration: 200 });
+            if (Math.random() < 0.1) p.setFlipX(!p.flipX);
+          } });
           this.critters.push({ kind: 'pigeon', s: p, home: p.x });
         }
       } else if (c.type === 'cat') {
-        const cat = this.add.sprite(c.x, c.y ?? FLOOR, 'cat_0').setOrigin(0.5, 1).setDepth(c.depth ?? 6).setFlipX(!!c.flip);
+        const cat = this.add.sprite(c.x, c.y ?? FLOOR, 'cat_0').setOrigin(0.5, 1).setDepth(c.depth ?? 6).setFlipX(!!c.flip).setScale(2);
         this.time.addEvent({ delay: 900, loop: true, callback: () => cat.setTexture(cat.texture.key === 'cat_0' ? 'cat_1' : 'cat_0') });
         this.critters.push({ kind: 'cat', s: cat });
       }
@@ -481,7 +665,8 @@ export class LocationScene extends Phaser.Scene {
         c.gone = true;
         sfx('flap');
         this.tweens.killTweensOf(c.s);
-        c.s.setAngle(0).setTexture('bird_0').play('bird_fly').setScale(1.4);
+        c.s.__peck?.remove();
+        c.s.setAngle(0).setTexture('bird_0').play('bird_fly').setScale(2);
         const dir = this.player.x < c.s.x ? 1 : -1;
         this.tweens.add({ targets: c.s, x: c.s.x + dir * Phaser.Math.Between(300, 600), y: Phaser.Math.Between(40, 160), duration: 1600, ease: 'Quad.out', onComplete: () => c.s.setVisible(false) });
       }
@@ -624,16 +809,16 @@ export class LocationScene extends Phaser.Scene {
 
   walkTo(sprite, x, speed) {
     return new Promise((resolve) => {
-      const key = sprite.texture.key.replace(/_\d$/, '');
       sprite.setFlipX(x < sprite.x);
-      sprite.play(`${key}_walk`);
+      walk(sprite);
+      // Темп шага под скорость: медленно идущий не «бежит на месте»
+      sprite.anims.timeScale = Math.max(0.5, Math.min(1.4, speed / 180));
       this.tweens.add({
         targets: sprite,
         x,
         duration: (Math.abs(x - sprite.x) / speed) * 1000,
         onComplete: () => {
-          sprite.anims.stop();
-          sprite.setTexture(`${key}_0`);
+          idle(sprite);
           resolve();
         },
       });
@@ -683,40 +868,48 @@ export class LocationScene extends Phaser.Scene {
   makeHud() {
     // Слева сверху — день и деньги (с Эпизода 1)
     this.info = uiContainer(this, 20, 20, 960);
-    this.infoBg = this.add.rectangle(0, 0, 240, 52, 0x0c0a16, 0.85).setOrigin(0).setStrokeStyle(2, 0x3df0ff);
+    this.infoBg = new Panel(this, 0, 0, 240, 52, { accent: 0x3df0ff, alpha: 0.88 });
     this.dayText = this.add.text(12, 9, '', { fontFamily: '"Press Start 2P"', fontSize: '10px', color: '#3df0ff' });
     this.cashText = this.add.text(12, 28, '', { fontFamily: '"PT Mono", monospace', fontSize: '17px', color: '#ffffff' });
-    // Энергия (Эпизод 2): тонкая полоска под деньгами
-    this.energyBg = this.add.rectangle(12, 50, 120, 5, 0x2a2838).setOrigin(0);
-    this.energyFill = this.add.rectangle(12, 50, 120, 5, 0x8ae6a0).setOrigin(0);
-    this.info.add([this.infoBg, this.dayText, this.cashText, this.energyBg, this.energyFill]);
+    this.info.add([...this.infoBg.objects, this.dayText, this.cashText]);
+    // Самочувствие: силы (Эп.2), сытость, чистота — значок и полоска под деньгами
+    needIcons(this);
+    this.needBars = ['energy', 'food', 'clean'].map((id) => {
+      const icon = this.add.image(0, 59, `need_${id}`).setOrigin(0, 0.5).setScale(2);
+      const bg = this.add.rectangle(0, 59, NEED_W, 6, 0x2a2838).setOrigin(0, 0.5);
+      const fill = this.add.rectangle(0, 59, NEED_W, 6, 0x8ae6a0).setOrigin(0, 0.5);
+      this.info.add([icon, bg, fill]);
+      return { id, icon, bg, fill };
+    });
     const btn = (this.hud = uiContainer(this, 892, 34, 960));
-    const bg = this.add.rectangle(0, 0, 100, 44, 0x0c0a16, 0.85).setStrokeStyle(2, 0xffd166);
+    const bgPanel = new Panel(this, -50, -22, 100, 44, { accent: 0xffd166, alpha: 0.88 });
+    const bg = this.add.rectangle(0, 0, 100, 44, 0x000000, 0.001);
     const t = this.add.text(-38, 0, '✎ [Q]', { fontFamily: '"PT Mono", monospace', fontSize: '18px', color: '#ffd166' }).setOrigin(0, 0.5);
     this.bookCount = this.add.text(36, 0, String(state.lines.length), {
       fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#0c0a16', backgroundColor: '#ffd166', padding: { x: 4, y: 3 },
     }).setOrigin(0.5);
-    btn.add([bg, t, this.bookCount]);
+    btn.add([...bgPanel.objects, bg, t, this.bookCount]);
     bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
       if (!this.busy && !this.phone.open) this.notebook.open ? this.notebook.hide() : this.openNotebook();
     });
 
     // Телефон [P] — рядом с тетрадью, с красным кружком непрочитанного
     const pb = (this.phoneBtn = uiContainer(this, 788, 34, 960));
-    const pbg = this.add.rectangle(0, 0, 92, 44, 0x0c0a16, 0.85).setStrokeStyle(2, 0x3df0ff);
+    const pPanel = new Panel(this, -46, -22, 92, 44, { accent: 0x3df0ff, alpha: 0.88 });
+    const pbg = this.add.rectangle(0, 0, 92, 44, 0x000000, 0.001);
     const body = this.add.rectangle(-26, 0, 16, 26, 0x3df0ff).setStrokeStyle(2, 0x0c0a16);
     const scr = this.add.rectangle(-26, -1, 10, 16, 0x0c0a16);
     const pt = this.add.text(-10, 0, '[P]', { fontFamily: '"PT Mono", monospace', fontSize: '18px', color: '#3df0ff' }).setOrigin(0, 0.5);
     this.phoneBadge = this.add.circle(38, -16, 10, 0xff3d3d).setVisible(false);
     this.phoneBadgeT = this.add.text(38, -16, '', { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#ffffff' }).setOrigin(0.5).setVisible(false);
-    pb.add([pbg, body, scr, pt, this.phoneBadge, this.phoneBadgeT]);
+    pb.add([...pPanel.objects, pbg, body, scr, pt, this.phoneBadge, this.phoneBadgeT]);
     pbg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
       if (!this.busy && !this.notebook.open && !this.pc.open) this.phone.toggle();
     });
     this.refreshPhoneBadge();
 
     // Палево (курьер Рея, Эп. 2)
-    const hb = (this.heatBar = uiContainer(this, 20, 84, 960));
+    const hb = (this.heatBar = uiContainer(this, 20, 100, 960));
     hb.add(this.add.rectangle(0, 0, 150, 26, 0x0c0a16, 0.85).setOrigin(0).setStrokeStyle(2, 0xff6b6b));
     hb.add(this.add.text(8, 7, 'ПАЛЕВО', { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#ff6b6b' }));
     hb.add(this.add.rectangle(66, 8, 76, 10, 0x2a1a1a).setOrigin(0));
@@ -737,7 +930,12 @@ export class LocationScene extends Phaser.Scene {
   callPill(name) {
     this.pill?.destroy();
     this.pill = null;
-    if (!name) return;
+    // Во время звонка — телефон у уха
+    if (!name) {
+      if ((this.player.anims.currentAnim?.key || '').endsWith('@phone')) idle(this.player);
+      return;
+    }
+    play(this.player, 'phone', true);
     const c = (this.pill = uiContainer(this, 20, 494, 1200));
     const t = this.add.text(36, 0, `${name} · 00:00`, { fontFamily: '"PT Mono", monospace', fontSize: '15px', color: '#ffffff' }).setOrigin(0, 0.5);
     const bg = this.add.rectangle(0, 0, t.width + 52, 32, 0x0c2a1a, 0.92).setOrigin(0, 0.5).setStrokeStyle(2, 0x3ad86a);
@@ -761,17 +959,59 @@ export class LocationScene extends Phaser.Scene {
     this.infoBg.setSize(Math.max(200, this.dayText.width + 24, this.cashText.width + 24), 52);
     this.heatFill?.setSize(Math.max(1, 76 * Math.min(1, state.heat / 100)), 10);
     const ep2 = state.episode === 'ep2';
-    this.energyBg.setVisible(ep2);
-    this.energyFill.setVisible(ep2);
-    if (ep2) {
-      const e = Math.max(0, Math.min(100, state.energy));
-      this.energyFill.setSize(Math.max(1, 1.2 * e), 5).setFillStyle(e < 25 ? 0xff6b6b : e < 50 ? 0xffd166 : 0x8ae6a0);
-      this.infoBg.setSize(this.infoBg.width, 60);
-    }
+    // Полоски: в Эп.1 — сытость и чистота, в Эп.2 — ещё и силы
+    const shown = this.needBars.filter((b) => (b.id === 'energy' ? ep2 : needsOn()));
+    this.needBars.forEach((b) => [b.icon, b.bg, b.fill].forEach((o) => o.setVisible(shown.includes(b))));
+    const COLORS = {
+      energy: (v) => (v < 25 ? 0xff6b6b : v < 50 ? 0xffd166 : 0x8ae6a0),
+      food: (v) => (v < FOOD_WEAK ? 0xff3d3d : v < FOOD_LOW ? 0xffb060 : 0xf0c060),
+      clean: (v) => (v < CLEAN_BAD ? 0x8a6a3a : v < CLEAN_LOW ? 0xb8a070 : 0x6ad8ff),
+    };
+    shown.forEach((b, i) => {
+      const v = Math.max(0, Math.min(100, Math.round(b.id === 'energy' ? state.energy : b.id === 'food' ? state.food : state.clean)));
+      const x = 12 + i * (NEED_W + 26);
+      b.icon.setX(x);
+      b.bg.setX(x + 18);
+      b.fill.setX(x + 18).setSize(Math.max(1, (NEED_W * v) / 100), 6).setFillStyle(COLORS[b.id](v));
+      // Мало — значок мигает
+      const low = b.id === 'energy' ? v < 25 : b.id === 'food' ? v < FOOD_LOW : v < CLEAN_LOW;
+      if (low && !b.blink) b.blink = this.tweens.add({ targets: b.icon, alpha: 0.25, duration: 420, yoyo: true, repeat: -1 });
+      if (!low && b.blink) {
+        b.blink.remove();
+        b.blink = null;
+        b.icon.setAlpha(1);
+      }
+    });
+    if (shown.length) this.infoBg.setSize(Math.max(this.infoBg.width, 12 + shown.length * (NEED_W + 26)), 70);
+  }
+
+  // Полоска чуть подпрыгивает, когда поел или помылся
+  bumpNeed(id) {
+    const b = this.needBars?.find((n) => n.id === id);
+    if (!b || !b.icon.visible) return;
+    this.tweens.add({ targets: b.icon, scale: 2.8, duration: 120, yoyo: true });
+    sfx(id === 'food' ? 'select' : 'line');
+  }
+
+  // «Конец»: голодный обморок
+  gameOver(reason) {
+    if (this.leaving) return;
+    this.leaving = true;
+    this.busy = true;
+    delete state.flags.nd_dead;
+    this.player.setOrigin(0.5, 0.62).setAngle(this.player.flipX ? 90 : -90).setY(FLOOR - 24);
+    this.cameras.main.shake(400, 0.006);
+    this.cameras.main.fadeOut(1600, 7, 6, 13);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      stopAmbience();
+      this.scene.start('Over', { reason });
+    });
   }
 
   addCash(delta, label) {
     if (delta) bankTx(delta, label);
+    // Отдаёт деньги — протягивает руку; получает — берёт
+    if (delta && !isWalking(this.player) && !this.player.__pose) gesture(this, this.player, delta < 0 ? 'give' : 'pick', 600);
     state.cash = Math.max(0, state.cash + delta);
     this.refreshHud();
     sfx(delta >= 0 ? 'coins' : 'deny');
@@ -783,6 +1023,7 @@ export class LocationScene extends Phaser.Scene {
   }
 
   giveItemFx(id) {
+    if (!isWalking(this.player)) gesture(this, this.player, 'pick', 700);
     giveItem(id);
     sfx('select');
     this.showToast('В КАРМАНЕ', ITEMS[id] || id, '#3df0ff');
@@ -818,6 +1059,7 @@ export class LocationScene extends Phaser.Scene {
   setAcid(on) {
     const cam = this.cameras.main;
     if (on && !this.acidFx) {
+      aberration(this, 0.035);
       if (cam.postFX) {
         this.acidFx = cam.postFX.addColorMatrix();
         this.acidBarrel = cam.postFX.addBarrel(1);
@@ -841,16 +1083,17 @@ export class LocationScene extends Phaser.Scene {
       }).setScrollFactor(0).setDepth(880);
       // След-призрак за героем
       this.acidTrail = this.time.addEvent({ delay: 110, loop: true, callback: () => {
-        if (!this.player.anims.isPlaying) return;
-        const g = this.add.image(this.player.x, this.player.y, this.player.texture.key).setOrigin(0.5, 1).setDepth(19)
+        if (!isWalking(this.player)) return;
+        const g = this.add.image(this.player.x, this.player.y, this.player.texture.key, this.player.frame.name).setOrigin(0.5, 1).setDepth(19).setScale(this.player.scaleX, this.player.scaleY)
           .setFlipX(this.player.flipX).setTint(Phaser.Utils.Array.GetRandom([0xff3d8a, 0x3df0ff, 0xffd166])).setAlpha(0.45).setBlendMode(Phaser.BlendModes.ADD);
-        this.tweens.add({ targets: g, alpha: 0, scaleX: 1.15, duration: 520, onComplete: () => g.destroy() });
+        this.tweens.add({ targets: g, alpha: 0, scaleX: g.scaleX * 1.15, duration: 520, onComplete: () => g.destroy() });
       } });
     } else if (!on && this.acidFx) {
       this.acidTween?.stop();
       this.acidTrail?.remove();
       this.acidBlobs?.destroy();
       cam.setRotation(0);
+      aberration(this, 0);
       if (cam.postFX) [this.acidFx, this.acidBarrel, this.acidBloom, this.acidVignette].forEach((f) => f && cam.postFX.remove(f));
       this.acidFx = null;
     }
@@ -866,27 +1109,45 @@ export class LocationScene extends Phaser.Scene {
 
   makeToast() {
     this.toast = uiContainer(this, 480, 620, 970);
-    this.toastBg = this.add.rectangle(0, 0, 700, 66, 0x0c0a16, 0.95).setStrokeStyle(2, 0xffd166);
+    this.toastBg = new Panel(this, -350, -33, 700, 66, { accent: 0xffd166, alpha: 0.95 });
     this.toastTitle = this.add.text(0, -14, '', { fontFamily: '"Press Start 2P"', fontSize: '11px', color: '#ffd166' }).setOrigin(0.5);
     this.toastText = this.add.text(0, 12, '', { fontFamily: '"PT Mono", monospace', fontSize: '18px', color: '#ffffff', fontStyle: 'italic' }).setOrigin(0.5);
-    this.toast.add([this.toastBg, this.toastTitle, this.toastText]);
+    this.toast.add([...this.toastBg.objects, this.toastTitle, this.toastText]);
   }
 
   showToast(title, text, color = '#ffd166') {
+    // Пока висит предыдущая плашка — новая ждёт очереди (одинаковые не дублируем)
+    if (this.time.now < (this.toastUntil || 0)) {
+      this.toastQueue = (this.toastQueue || []).filter((q) => q[0] !== title);
+      if (this.toastQueue.length < 4) this.toastQueue.push([title, text, color]);
+      return;
+    }
+    this.toastUntil = this.time.now + 3300;
     this.toastTitle.setText(title).setColor(color);
     this.toastText.setText(text);
-    this.toastBg.setSize(Math.max(420, this.toastText.width + 60), 66);
-    this.toastBg.setStrokeStyle(2, Phaser.Display.Color.HexStringToColor(color).color);
+    const tw = Math.max(420, this.toastText.width + 60);
+    this.toastBg.x = -tw / 2;
+    this.toastBg.accent = Phaser.Display.Color.HexStringToColor(color).color;
+    this.toastBg.setSize(tw, 66);
     this.tweens.killTweensOf(this.toast);
     this.toast.y = 620;
-    this.tweens.add({ targets: this.toast, y: 496, duration: 350, ease: 'Back.out', hold: 2600, yoyo: true });
+    this.tweens.add({
+      targets: this.toast, y: 496, duration: 350, ease: 'Back.out', hold: 2600, yoyo: true,
+      onComplete: () => {
+        this.toastUntil = 0;
+        const next = this.toastQueue?.shift();
+        if (next) this.showToast(...next);
+      },
+    });
   }
 
-  makeRain() {
-    this.add.particles(0, -20, 'drop', {
-      x: { min: -100, max: 1060 }, lifespan: 900, speedY: { min: 700, max: 900 }, speedX: -120,
-      alpha: { start: 0.35, end: 0.1 }, quantity: 3, frequency: 16,
-    }).setScrollFactor(0).setDepth(800);
+  // Погода по умолчанию: пыль в тёмных помещениях, туман у воды и на промзоне ночью
+  defaultWeather() {
+    const env = this.lightEnv;
+    if (!env) return null;
+    if (['night_port', 'promzona', 'rechnaya'].includes(this.locKey) && env.dark > 0.5) return 'fog';
+    if (!env.outdoor && env.dark > 0.3) return 'dust';
+    return null;
   }
 
   makeTouchControls() {

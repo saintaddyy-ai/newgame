@@ -23,6 +23,10 @@ function defaults() {
     // Скрытый «Пульс» 0–100: как город сейчас чувствует Марка
     pulse: 50,
     energy: 100,
+    // Сытость и чистота 0–100 (Эп.1–2, см. src/needs.js); starve — сколько уже голодает на нуле
+    food: 80,
+    clean: 80,
+    starve: 0,
     // Палево (курьер Рея)
     heat: 0,
     // Телефон: контакты, переписки, звонки
@@ -35,7 +39,7 @@ function defaults() {
     // Задания: id → { title, status: 'active'|'done'|'failed', note, giver }
     quests: {},
     // Настройки (громкость, озвучка, автотюн)
-    settings: { music: 0.8, sfx: 0.7, voice: true, voiceVol: 1.4, textSpeed: 22, autotune: 'off', headphones: true },
+    settings: { music: 0.8, sfx: 0.7, voice: true, voiceVol: 1.4, textSpeed: 22, autotune: 'off', headphones: true, graphics: 'high', phoneX: 640, brightness: 1 },
   };
 }
 
@@ -182,7 +186,7 @@ export function hhmm(min) {
 }
 
 // Примерное время в Прологе и Эпизоде 1 (там время идёт фазами)
-const PHASE_CLOCK = { tue: 1170, tue_night: 1430, wed: 620, wed_night: 1420, thu: 660, thu_eve: 1150, final: 1350, outro: 40 };
+export const PHASE_CLOCK = { tue: 1170, tue_night: 1430, wed: 620, wed_night: 1420, thu: 660, thu_eve: 1150, final: 1350, outro: 40 };
 
 export function clockShort() {
   if (state.episode === 'ep2') return hhmm(state.time.min);

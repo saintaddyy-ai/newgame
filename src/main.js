@@ -9,8 +9,10 @@ import { EndScene } from './scenes/EndScene.js';
 import { WarehouseScene } from './scenes/WarehouseScene.js';
 import { StageScene } from './scenes/StageScene.js';
 import { ChaseScene } from './scenes/ChaseScene.js';
+import { OverScene } from './scenes/OverScene.js';
 import { state } from './state.js';
 import { audioCtx } from './audio.js';
+import { AberrationFX } from './gfx/fx.js';
 
 // Для автотестов и отладки из консоли
 window.__state = state;
@@ -27,7 +29,18 @@ async function loadFonts() {
   await Promise.race([wait, new Promise((r) => setTimeout(r, 2000))]).catch(() => {});
 }
 
+// Холст может сдвинуться на странице без изменения размера окна (встраивание, загрузка шрифтов,
+// прокрутка). Тогда Phaser считает клики по старым границам и «промахивается».
+// Перед каждым нажатием и раз в секунду обновляем границы холста.
+function keepBoundsFresh() {
+  const refresh = () => window.game?.scale?.updateBounds();
+  ['pointerdown', 'mousedown', 'touchstart'].forEach((ev) => window.addEventListener(ev, refresh, { capture: true, passive: true }));
+  window.addEventListener('scroll', refresh, { passive: true });
+  setInterval(refresh, 1000);
+}
+
 loadFonts().then(() => {
+  keepBoundsFresh();
   window.game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',
@@ -37,6 +50,7 @@ loadFonts().then(() => {
     pixelArt: true,
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     input: { activePointers: 3 },
-    scene: [BootScene, TitleScene, LocationScene, StudioScene, EndScene, WarehouseScene, StageScene, ChaseScene],
+    pipeline: { AberrationFX },
+    scene: [BootScene, TitleScene, LocationScene, StudioScene, EndScene, WarehouseScene, StageScene, ChaseScene, OverScene],
   });
 });

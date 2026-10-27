@@ -7,6 +7,7 @@
 //   npm run voice -- --redo=Мама,Рей   переозвучить персонажей после смены голоса
 //   npm run voice -- --file=episode1   только реплики из одного файла сценария
 //   npm run voice -- --dry --prune      удалить файлы реплик, которых больше нет в игре
+//   npm run voice -- --dry --list=docs/voice-todo.md   записать список неозвученных реплик (кто, что, файл)
 //   В облачной среде Claude Code: NODE_USE_ENV_PROXY=1 (Node ходит через прокси)
 //
 // Скрипт находит в src/story/*.js вызовы d.say('Имя', '...') и d.think('...'),
@@ -153,6 +154,18 @@ async function main() {
   const bySpeaker = {};
   todo.forEach((l) => (bySpeaker[l.speaker] = (bySpeaker[l.speaker] || 0) + 1));
   console.log('По персонажам:', bySpeaker);
+
+  // --list=файл.md — список того, что нужно озвучить (по персонажам)
+  const LIST = (args.find((a) => a.startsWith('--list=')) || '').slice(7);
+  if (LIST) {
+    const out = [`# Реплики без озвучки\n`, `Всего: ${todo.length} реплик, ${chars} символов. Сгенерировать: \`npm run voice\` (нужен ключ).\n`];
+    for (const sp of Object.keys(bySpeaker).sort((a, b) => bySpeaker[b] - bySpeaker[a])) {
+      out.push(`\n## ${sp === 'think' ? 'Мысли Марка (think)' : sp} — ${bySpeaker[sp]}\n`);
+      todo.filter((l) => l.speaker === sp).forEach((l) => out.push(`- ${l.text.replace(/\n/g, ' ')}  \`${l.file}\``));
+    }
+    fs.writeFileSync(path.resolve(ROOT, LIST), out.join('\n') + '\n');
+    console.log(`Список: ${LIST}`);
+  }
 
   // --prune: удалить файлы реплик, которых больше нет в игре
   if (args.includes('--prune')) {

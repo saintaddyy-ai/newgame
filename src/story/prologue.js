@@ -110,19 +110,23 @@ export const LOCATIONS = {
       { id: 'front', x: 1840, w: 94, h: 210, color: 0x6a3a2a },
     ],
 
-    async onEnter({ d }) {
+    async onEnter({ d, goal }) {
       if (F.wokeUp) return;
       F.wokeUp = true;
       await d.think('Шесть сорок. Будильник не нужен — за стенкой мама гремит кастрюлями.');
       await d.think('Опять собирается на две смены.');
       await d.say('', '← → или A / D — ходить.   E — осмотреть / поговорить.   Q — тетрадь.   P — телефон.', '#ffd166');
+      d.close();
+      // Цель видна в тетради и в «Делах» телефона — новичку есть за что зацепиться
+      goal('Мама на кухне — поговорить перед её сменой');
     },
 
     npcs: [
       {
         id: 'mom', name: 'Мама', sprite: 'mom', x: 1010, flip: true,
         when: () => !F.momLeft,
-        async talk({ d, line, npc, walk, wait, door, scene }) {
+        async talk(ctx) {
+          const { d, line, npc, walk, wait, door, scene } = ctx;
           const mom = npc('mom');
           await d.say('Мама', 'Проснулся? Гречка на плите, ещё тёплая.');
           await d.say('Мама', 'Я сегодня на две смены. Вернусь поздно — не жди.');
@@ -159,6 +163,7 @@ export const LOCATIONS = {
           await d.say('Мама', 'И это... Дэн вчера заходил. Искал тебя. Сказал — в гараже будет.');
           d.close();
           F.momLeft = true;
+          ctx.goal('К Дэну в гараж №17 — через двор, в самом конце');
           await walk(mom, 1790, 130);
           door('front', true);
           await walk(mom, 1850, 100);
@@ -284,7 +289,7 @@ export const LOCATIONS = {
       { x: 1346, y: 210, r: 120, color: 0xffe0a0, cone: true },
       { x: 2017, y: 440, r: 110, color: 0xffd27a },
     ],
-    critters: [{ type: 'pigeons', x: 560, n: 5 }, { type: 'cat', x: 1700, y: 244, depth: 4 }],
+    critters: [{ type: 'pigeons', x: 560, n: 5 }, { type: 'cat', x: 1700, y: 266, depth: 4 }],
     photoSpots: [
       { id: 'p_graffiti', x: 1400, line: { id: 'photo_tag', text: 'Сфоткал своё имя на стене, чтобы не забыть, что оно моё', tag: 'street' } },
       { id: 'p_swings', x: 760, text: 'Качели под дождём. Скрипят, как старая пластинка.' },
@@ -465,7 +470,7 @@ export const LOCATIONS = {
 
 // ---------- Дэн и бит ----------
 
-async function danIntro({ d, line, go, fx, wait, scene, sfx: play }) {
+async function danIntro({ d, line, go, fx, wait, scene, sfx: play, goal }) {
   if (!F.danMet) {
     F.danMet = true;
     await d.say('Дэн', 'О, живой! Я уж думал, тебя мама на склад сдала.');
@@ -515,6 +520,7 @@ async function danIntro({ d, line, go, fx, wait, scene, sfx: play }) {
   }
   await d.say('Дэн', 'Выбираешь три строчки — и к микрофону. Зачитаешь вживую, я запишу. Как в караоке, только по-взрослому.');
   stopMusic(0.6);
+  goal('Записать первый трек в будке у Дэна');
   go('Studio');
 }
 
@@ -525,7 +531,7 @@ const TRACK_REACTIONS = {
   mixed: 'Там всё сразу — и двор, и боль, и мечта. Это как наш с тобой гараж. Это мы.',
 };
 
-async function afterRecording({ d, npc, scene, wait }) {
+async function afterRecording({ d, npc, scene, wait, goal }) {
   const track = state.tracks[state.tracks.length - 1];
   const dan = npc('dan');
   dan.setFlipX(true);
@@ -562,4 +568,5 @@ async function afterRecording({ d, npc, scene, wait }) {
   await d.think('Если, конечно, этот микрофон доживёт до пятницы...');
   F.prologueDone = true;
   await d.say('', 'Подойди к компу Дэна, чтобы переслушать демку. Когда будешь готов — выходи из гаража.', '#ffd166');
+  goal('Демка готова. Переслушать на компе Дэна — и выйти из гаража');
 }

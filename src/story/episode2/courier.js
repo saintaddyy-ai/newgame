@@ -1,10 +1,11 @@
 // Рей во втором эпизоде: долг, флаеры, менеджер — и «Курьер Рея» (задание 1).
 // Торговля без подробностей: «пакеты» и «марочки» Рея. Шкала «Палево», покупатели, переодетые полицейские, облава.
 import { voiced } from '../../voice.js';
-import { F, state, giveItem, takeItem, pulse, now, at, day, addFollowers, feed, quest, questStatus, receive, rel, relOf, once, weighted, pickOne } from './common.js';
+import { F, state, giveItem, takeItem, pulse, now, at, day, addFollowers, feed, quest, questStatus, receive, rel, relOf, once, weighted, pickOne, clean } from './common.js';
 import { randomSpec, personTexture } from './people.js';
 import { nextDay } from './world.js';
 import { rayServiceOffer } from './girls.js';
+import { addActor } from '../../gfx/actors.js';
 
 export const courierOpen = () => !F.busted && !F.quitRay && (relOf('ray') >= 3 || F.reyLeadgen);
 
@@ -197,7 +198,7 @@ export async function buyerApproach(ctx) {
   const kind = weighted([['buyer', 50], ['haggler', 20], ['scam', 10], ['cop', 15 + Math.max(0, state.heat - 40) / 3], ['friend', 5]]);
   const spec = kind === 'cop' ? { hair: 'short', top: '#4a4a58', glasses: Math.random() < 0.5 } : {};
   const key = personTexture(scene, randomSpec(`buyer_${Date.now()}`, spec));
-  const npc = scene.add.sprite(scene.player.x + 300, 470, `${key}_0`).setOrigin(0.5, 1).setDepth(11);
+  const npc = addActor(scene, scene.player.x + 300, 470, key, { depth: 11 });
   await ctx.walk(npc, scene.player.x + 100, 150);
   npc.setFlipX(true);
   scene.player.setFlipX(false);
@@ -264,8 +265,12 @@ async function checkRaid(ctx) {
 // ---------- Курьер: часть 3 — облава ----------
 
 export async function raid(ctx) {
-  const { d, start, sfx } = ctx;
+  const { d, start, sfx, fx, scene } = ctx;
   sfx('siren');
+  // Синие и красные отблески мигалки, камера дёргается
+  fx.shake(500, 0.008);
+  const flash = scene.add.rectangle(0, 0, 960, 540, 0x3a5aff, 0).setOrigin(0).setScrollFactor(0).setDepth(880).setBlendMode('ADD');
+  scene.tweens.add({ targets: flash, fillAlpha: 0.16, duration: 220, yoyo: true, repeat: -1, onRepeat: () => flash.setFillStyle(flash.fillColor === 0x3a5aff ? 0xff3a5a : 0x3a5aff, flash.fillAlpha) });
   await d.think('Сирена. Синие отблески на стенах. Кто-то кричит «Стоять!» — и это мне.');
   const c = await d.choose(['[Бежать дворами]', '[Сдаться]'], { timer: 4, timeoutIndex: 0 });
   if (c === 1) return busted(ctx);
@@ -279,6 +284,8 @@ export async function afterChase(ctx) {
   const { d } = ctx;
   const res = F.e2ChaseResult;
   F.e2ChaseResult = null;
+  // Заборы, лужи, гаражи — после погони весь в грязи
+  clean(-25);
   if (res === 'escaped') {
     state.heat = 30;
     if (F.e2DumpedPacks) {

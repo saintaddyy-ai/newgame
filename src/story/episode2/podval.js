@@ -3,7 +3,8 @@ import Phaser from 'phaser';
 import { voiced } from '../../voice.js';
 import { BEAT, playMusic, stopMusic } from '../../audio.js';
 import { addContact } from '../../phone/model.js';
-import { F, state, hasItem, takeItem, pulse, now, at, day, addFollowers, feed, quest, rel, relOf, once, post } from './common.js';
+import { F, state, hasItem, takeItem, pulse, now, at, day, addFollowers, faceFollowers, feed, quest, questStatus, rel, relOf, once, post, clean, remark } from './common.js';
+import { addActor } from '../../gfx/actors.js';
 
 const FLOOR = 470;
 
@@ -63,7 +64,8 @@ export async function giveFlyer(ctx, idx) {
         ctx.cash(2000, '«толстый» флаер');
         pulse(-5);
         state.stats.addiction += 1;
-        if (F.e2MiraHere) F.e2MiraSawFlyer = true;
+        // Мира у входа с плёночным фотоаппаратом — видит, что за флаер
+        if (F.e2MiraHere || ctx.scene.npcs?.mira?.visible) F.e2MiraSawFlyer = true;
         await d.think('Она забирает флаер, не глядя. Сует мне в карман купюры. Всё быстро, как в плохом сне.');
       } else {
         await d.think('У меня только обычные флаеры. Рей дал «половину воронки». Она закатывает глаза.');
@@ -93,6 +95,12 @@ export async function bulldogTalk(ctx) {
     return d.say('Бульдог', 'Рано. В семь. Ты кто вообще? …А, вопросительный знак. Ну, жди, вопросительный.');
   }
   await d.say('Бульдог', F.e2BulldogMet ? 'Проходи, вопросительный.' : 'Имя? …Тень. Ты в списке. Вопросительным знаком. Проходи. И без глупостей.');
+  // Охрана тоже чувствует, когда от тебя пахнет
+  const smell = remark('bulldog');
+  if (smell) {
+    await d.say('Бульдог', smell);
+    pulse(-1);
+  }
   F.e2BulldogMet = true;
   F.e2InPodval = true;
   go('podval', 120);
@@ -214,27 +222,68 @@ export async function adamBackstage(ctx) {
   await d.say('Адам', 'Дыши. Дыши.');
 }
 
+const STAS_POD = voiced('Стас', {
+  check: 'Тень. Микро проверил: минус шесть дБ на входе, гейт стоит. Хочешь громче — говори сейчас. Потом поздно, потом — дерьмо.',
+  loud: 'Плюс три дБ. Будет бить в грудь. Если зафонит — это не я, это судьба.',
+  noStream: 'Не стримить? Окей, бро. Камеру — в стену. Запись всё равно пишу, для архива. Архив не спрашивает.',
+  selfRap: 'Читаю. Сегодня, кстати, выйду между номерами, пока меняют стойку. Квадро в этой тсс… Не пропусти.',
+  ready: 'Уровни стоят. Компрессор дышит. Не трогай фейдеры, бро, они кусаются.',
+  twin: 'Адам проверял микро: сказал «раз», а микро само ответило «раз». Я даже дилей не включал. Гад дем.',
+  after: 'Видел, как зал на тебя дышал? Я видел. На индикаторах. Это не враньё, индикаторы не врут.',
+  fire: 'Четыреста с лишним человек в стриме, бро. Твой кусок вырезал, сведу ночью. Звук — чище, чем совесть Рея.',
+  ok: 'Триста человек в стриме. Кусок вырезал, ночью сведу. Не огонь — но и не дерьмо. Расти.',
+  fail: 'Сто восемьдесят в стриме, половина — боты Рея. Кусок вырезал. Звук не виноват, бро, звук сделал всё.',
+});
+
 export async function stasConsole(ctx) {
   const { d } = ctx;
   if (F.stasLoud === undefined && !F.e2PodvalDone) {
-    await d.say('Стас', 'Тень. Микро проверили. Уровень — минус шесть дБ. Хочешь громче — скажи сейчас. Громче — это плюс двадцать процентов к залу. Или минус.');
+    await d.say('Стас', STAS_POD.check);
     const c = await d.choose(['«Сделай погромче.»', '«Не стримь меня, ладно?»', '«А ты сам читаешь?»']);
     if (c === 0) {
       F.stasLoud = true;
-      await d.say('Стас', 'Плюс три дБ. Будет бить в грудь. Сто процентов.');
+      await d.say('Стас', STAS_POD.loud);
     } else if (c === 1) {
       F.noStream = true;
       F.stasLoud = false;
       rel('stas', -1);
-      await d.say('Стас', 'Ноль процентов стрима. Как скажешь. Но запись я всё равно сделаю. Для архива.');
+      await d.say('Стас', STAS_POD.noStream);
     } else {
       F.stasLoud = false;
+      F.e2AskedStasRap = true;
       rel('stas', 2);
-      await d.say('Стас', 'Читал. Пять лет назад. Девяносто процентов зала ушли. Остальные десять — это были мои родители.');
+      await d.say('Стас', STAS_POD.selfRap);
     }
     return;
   }
-  await d.say('Стас', 'Уровни стоят. Всё на мне. Сто процентов.');
+  if (F.e2PodvalDone) return d.say('Стас', STAS_POD.after);
+  await d.say('Стас', once('stas_twin') ? STAS_POD.twin : STAS_POD.ready);
+}
+
+// Стас между номерами: пока меняют стойку, QuadroXZ сам выходит к микрофону
+const STAS_SHOW = voiced('Стас', {
+  host: 'Пока меняем стойку — наш звукарь. Сам себя свёл заранее. QuadroXZ!',
+  v1: 'Квадро в этой тсс… Я свожу ваши голоса, пока вы сводите концы.',
+  v2: 'Мой компрессор добрее, чем ваш продюсер: он хотя бы держит планку.',
+  v3: 'Вы кричите «громче» — я режу триста герц. Громче не надо. Надо — честнее.',
+  out: 'Всё. Обратно к пульту. Кто тронет фейдер — фак, найду по отпечаткам.',
+  nod: 'Тень, ты следующий. Дыши в микро, а не в меня.',
+});
+
+async function stasSet(ctx) {
+  const { d, wait, sfx } = ctx;
+  const stas = await onStage(ctx, 'stas');
+  await d.say('', `ВЕДУЩИЙ: ${STAS_SHOW.host}`, '#ffd166');
+  await d.say('Стас', STAS_SHOW.v1);
+  await d.say('Стас', STAS_SHOW.v2);
+  await d.think('Ни одного лишнего движения. Стоит у микрофона, как за пультом. Зал сначала молчит, потом кто-то ржёт на «сводите концы» — и всех прорывает.');
+  await d.say('Стас', STAS_SHOW.v3);
+  sfx('cheer');
+  await d.say('Стас', STAS_SHOW.out);
+  if (F.e2AskedStasRap) await d.say('Стас', STAS_SHOW.nod);
+  d.close();
+  stas.destroy();
+  await wait(300);
 }
 
 export async function romaYard(ctx) {
@@ -262,7 +311,7 @@ export async function romaYard(ctx) {
 // ---------- Шоу ----------
 
 async function onStage(ctx, sprite, x = 900) {
-  const s = ctx.scene.add.sprite(x, FLOOR - 50, `${sprite}_0`).setOrigin(0.5, 1).setDepth(9).setScale(1.1);
+  const s = addActor(ctx.scene, x, FLOOR - 50, sprite, { depth: 9, scale: 1.1 });
   s.setAlpha(0);
   ctx.scene.tweens.add({ targets: s, alpha: 1, duration: 400 });
   ctx.scene.tweens.add({ targets: s, y: s.y - 6, duration: 180, yoyo: true, repeat: -1 });
@@ -321,6 +370,8 @@ export async function runShow(ctx) {
   sfx('cheer');
   d.close();
   ray.destroy();
+  await wait(400);
+  await stasSet(ctx);
   stopMusic(0.5);
   await wait(400);
 
@@ -339,11 +390,13 @@ async function afterMark(ctx) {
   // Вечер в «Подвале» идёт своим ходом: три номера до тебя и twinspeak после
   if (now() < at(22, 30)) ctx.time(at(22, 30) - now());
   const r = F.podvalResult;
+  // Софиты, толпа, три минуты на пределе — мокрый насквозь
+  clean(-20);
   if (r === 'fire') {
     pulse(10);
     state.stats.fame += 3;
-    addFollowers('ritm', 160, 'видео из «Подвала»');
-    addFollowers('kadr', 70, 'фото из «Подвала»');
+    faceFollowers('ritm', 160, 'видео из «Подвала»');
+    faceFollowers('kadr', 70, 'фото из «Подвала»');
     await d.think('Зал орёт. Я не слышу собственного сердца. Только «ТЕНЬ! ТЕНЬ!» — как будто это не имя, а приказ.');
   } else if (r === 'ok') {
     pulse(4);
@@ -372,6 +425,8 @@ async function afterMark(ctx) {
   sfx('clap');
 
   // После шоу
+  // Очередь разошлась — флаеры Рея так и остались в кармане
+  if (questStatus('e2_flyers') === 'active') quest('e2_flyers', { status: 'failed', title: 'Сто лидов: очередь разошлась' });
   F.e2PodvalDone = true;
   await d.say('Адам', 'Ты слышал себя. Это редкость. Мы — «САМИЗДАТ». Мы независимые. Независимые.');
   await d.think('Адам кладёт мне в ладонь жетон метро. На нём маркером: «РЕЧНАЯ».');
@@ -380,7 +435,7 @@ async function afterMark(ctx) {
   addContact('adam', { silent: true });
   quest('e2_samizdat', { title: '«САМИЗДАТ»', note: 'Отнести демку Адаму на станцию «Речная» (жетон в кармане)', giver: 'adam', status: 'active' });
   if (!F.noStream) {
-    await d.say('Стас', `Стрим — ${r === 'fire' ? 412 : r === 'ok' ? 312 : 188} человек. Твой кусок вырезал. Звук — девяносто процентов. Девяносто — это много.`);
+    await d.say('Стас', STAS_POD[r] || STAS_POD.ok);
     post('ritm', { author: 'QuadroXZ', text: 'Тень в «Подвале» — live', likes: r === 'fire' ? 820 : r === 'ok' ? 240 : 60 });
     addContact('stas', { silent: true });
   }
