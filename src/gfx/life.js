@@ -128,7 +128,9 @@ export function distantWalkers(scene, width, { n = 3, y = 412, f = 0.5 } = {}) {
       const key = personTexture(scene, randomSpec(`far_${Math.floor(Math.random() * 30)}`), null, 'crowd');
       const dir = Math.random() < 0.5 ? 1 : -1;
       const span = 960 + (width - 960) * f;
-      const s = addActor(scene, dir > 0 ? -40 : span + 40, y, key, { scale: 0.5, flip: dir < 0, depth: -39 }).setScrollFactor(f, 1).setTint(tint);
+      // Глубина — сразу над слоем своего плана (у слоя f глубина −50 + f·10), но ПОЗАДИ ближнего плана (гаражи, стены):
+      // иначе прохожие «идут по стене»
+      const s = addActor(scene, dir > 0 ? -40 : span + 40, y, key, { scale: 0.5, flip: dir < 0, depth: -50 + f * 10 + 0.5 }).setScrollFactor(f, 1).setTint(tint);
       s.__noLight = true;
       scene.__actors?.delete(s);
       walk(s);

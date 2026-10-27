@@ -15,8 +15,9 @@ export const CAST_SPECS = {
   ray: { h: 62, hair: 'swept', hairColor: '#e0c890', glasses: 'pink', skin: '#ecc6a6', garment: 'leopard', topColor: '#cfc6ae', accent: '#2a2a34', tattoo: true, chain: '#e8d070', pants: '#2a2a34', shoes: '#e8e8e8' },
   // Аркаша: лохматый брюнет, белая футболка, джинсы
   arkasha: { h: 63, build: 'slim', hair: 'shaggy', hairColor: '#2a1e18', skin: '#e6bc9a', garment: 'tee', topColor: '#f2f2f2', pants: '#5a7aa8', shoes: '#e8e8e8' },
-  // Стас: русая чёлка, авиаторы, чёрная футболка, серебряная цепь
-  stas: { h: 64, hair: 'fringe', hairColor: '#7a5a3e', glasses: 'aviator', skin: '#ecc4a4', garment: 'tee', topColor: '#1a1a1e', chain: '#d8d8e0', pants: '#22242c', shoes: '#1a1a1a', dark: true },
+  // Стас (QuadroXZ): современный рэпер-звукарь — платиновые волосы, узкие тёмные очки,
+  // чёрный спортивный костюм с белым лампасом, серебряная цепь, серьга, белые кроссовки
+  stas: { h: 64, hair: 'bleach', hairColor: '#d8dce6', glasses: 'dark', skin: '#e8bea0', earring: true, garment: 'tracksuit', topColor: '#18181e', chain: '#d8d8e0', pants: '#18181e', shoes: '#f0f0f0', dark: true },
   // Адам: чёрные дреды, серый свитшот с принтом
   adam: { h: 64, hair: 'dreads', hairColor: '#141010', skin: '#d8a888', garment: 'sweater', topColor: '#cfcfd4', print: '#5a5a62', pants: '#22242c', shoes: '#2a2a2a' },
   // Рома (3g0th2002): рыжие кудри на глаза, пирсинг, усики, чёрное худи

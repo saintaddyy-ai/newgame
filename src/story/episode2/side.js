@@ -93,7 +93,7 @@ export async function stasCafe(ctx) {
   if (await streamAftermath(ctx)) return;
   if (!F.e2StasMet) {
     F.e2StasMet = true;
-    await d.think('У окна — парень в авиаторах и с цепью. Ноутбук, наушники, американо. Пальцы двигают невидимые фейдеры.');
+    await d.think('У окна — парень с платиновыми волосами, в узких тёмных очках и чёрном спортивном костюме. Цепь, ноутбук, наушники, американо. Пальцы двигают невидимые фейдеры.');
     await d.say('Стас', STAS.meet);
     await d.say('Стас', STAS.askMic);
     await d.say('Стас', STAS[F.micType] || STAS.shure);
