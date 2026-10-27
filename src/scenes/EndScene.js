@@ -58,6 +58,10 @@ function episode1Rows() {
     f.danHurt ? 'Дэн обижен: ты продал ваши строчки.' : f.liedDan ? 'Ты соврал Дэну про флаеры.' : null,
     f.akhmedFriend ? 'Ахмед со склада тебе должен.' : null,
     `Строчек в тетради: ${state.lines.length}. Демок на компе Дэна: ${state.tracks.length}.`,
+    `Осталось денег: ${state.cash.toLocaleString('ru-RU')} ₽.`,
+    f.momKnowsAcid ? 'Мама знает про марочку.' : f.liedMom ? 'Ты соврал маме, глядя ей в глаза.' : null,
+    f.sleptOut ? (f.warnedMom ? 'Ты ночевал у Дэна и предупредил маму.' : 'Ты не ночевал дома — мама не спала всю ночь.') : null,
+    f.kidPromise ? 'Ты пообещал пацану трек про двор.' : null,
   ];
 }
 

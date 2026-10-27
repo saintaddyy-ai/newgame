@@ -5,6 +5,7 @@
 //   ELEVENLABS_API_KEY=... npm run voice
 //   VOICE_PROVIDER=yandex YANDEX_API_KEY=... npm run voice
 //   npm run voice -- --redo=Мама,Рей   переозвучить персонажей после смены голоса
+//   npm run voice -- --dry --prune      удалить файлы реплик, которых больше нет в игре
 //   В облачной среде Claude Code: NODE_USE_ENV_PROXY=1 (Node ходит через прокси)
 //
 // Скрипт находит в src/story/*.js вызовы d.say('Имя', '...') и d.think('...'),
@@ -13,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { lineId } from '../src/voice.js';
+import { lineId, splitRemarks } from '../src/voice.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const STORY = path.join(ROOT, 'src/story');
@@ -30,23 +31,76 @@ const PROVIDER = process.env.VOICE_PROVIDER || 'elevenlabs';
 const STR = String.raw`'((?:[^'\\]|\\.)*)'`;
 const unq = (s) => s.replace(/\\'/g, "'").replace(/\\n/g, '\n').replace(/\\\\/g, '\\');
 
+// Все .js в src/story (и подпапках)
+function storyFiles(dir = STORY) {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = path.join(dir, e.name);
+    if (e.isDirectory()) return storyFiles(p);
+    return e.name.endsWith('.js') ? [p] : [];
+  });
+}
+
+// Аргументы вызова до закрывающей скобки: [[литералы 1-го аргумента], [2-го], …].
+// Строки в одинарных кавычках собираются из любых выражений (тернарники и т. п.), шаблоны `${}` пропускаются.
+function callArgs(src, from) {
+  const args = [[]];
+  let depth = 0;
+  for (let i = from; i < src.length; i++) {
+    const ch = src[i];
+    if (ch === "'") {
+      let j = i + 1;
+      let str = '';
+      while (j < src.length && src[j] !== "'") {
+        if (src[j] === '\\') {
+          str += src[j] + src[j + 1];
+          j += 2;
+        } else str += src[j++];
+      }
+      args[args.length - 1].push(unq(str));
+      i = j;
+    } else if (ch === '`') {
+      let j = i + 1;
+      while (j < src.length && src[j] !== '`') j += src[j] === '\\' ? 2 : 1;
+      i = j;
+    } else if (ch === '(' || ch === '[' || ch === '{') depth++;
+    else if (ch === ')' || ch === ']' || ch === '}') {
+      if (depth === 0) return args;
+      depth--;
+    } else if (ch === ',' && depth === 0) args.push([]);
+  }
+  return args;
+}
+
 function collect() {
   const lines = new Map();
-  for (const f of fs.readdirSync(STORY).filter((f) => f.endsWith('.js'))) {
-    const src = fs.readFileSync(path.join(STORY, f), 'utf8');
-    for (const m of src.matchAll(new RegExp(String.raw`\.say\(\s*${STR}\s*,\s*${STR}`, 'g'))) {
-      const speaker = unq(m[1]);
-      if (!speaker) continue; // подсказки интерфейса без имени не озвучиваем
-      add(lines, speaker, unq(m[2]), f);
+  for (const file of storyFiles()) {
+    const f = path.relative(STORY, file);
+    const src = fs.readFileSync(file, 'utf8');
+    for (const m of src.matchAll(/\.say\(\s*/g)) {
+      const [who, what = []] = callArgs(src, m.index + m[0].length);
+      // Имя — только прямой строкой; подсказки интерфейса без имени не озвучиваем
+      if (who?.length !== 1 || !who[0]) continue;
+      for (const t of what) add(lines, who[0], t, f);
     }
-    for (const m of src.matchAll(new RegExp(String.raw`\.think\(\s*${STR}`, 'g'))) add(lines, 'think', unq(m[1]), f);
+    for (const m of src.matchAll(/\.think\(\s*/g)) {
+      const [what = []] = callArgs(src, m.index + m[0].length);
+      for (const t of what) add(lines, 'think', t, f);
+    }
+    // Наборы вариантов: voiced('Дэн', { key: '…', … })
+    for (const m of src.matchAll(new RegExp(String.raw`voiced\(\s*${STR}\s*,\s*\{([\s\S]*?)\}\s*\)`, 'g'))) {
+      const speaker = unq(m[1]);
+      for (const v of m[2].matchAll(new RegExp(STR, 'g'))) add(lines, speaker, unq(v[1]), f);
+    }
   }
   return [...lines.values()];
 }
 
 function add(map, speaker, text, file) {
-  const id = lineId(speaker, text);
-  if (!map.has(id)) map.set(id, { id, speaker, text, file });
+  // Озвучиваем без ремарок в скобках — так же, как это делает игра
+  const clean = splitRemarks(text).clean;
+  if (!clean) return;
+  const id = lineId(speaker, clean);
+  if (!map.has(id)) map.set(id, { id, speaker, text: clean, file });
 }
 
 function voiceFor(speaker) {
@@ -95,6 +149,18 @@ async function main() {
   todo.forEach((l) => (bySpeaker[l.speaker] = (bySpeaker[l.speaker] || 0) + 1));
   console.log('По персонажам:', bySpeaker);
 
+  // --prune: удалить файлы реплик, которых больше нет в игре
+  if (args.includes('--prune')) {
+    const keep = new Set(collect().map((l) => l.id));
+    let n = 0;
+    for (const f of fs.readdirSync(OUT).filter((f) => f.endsWith('.mp3'))) {
+      if (!keep.has(f.slice(0, -4))) {
+        fs.rmSync(path.join(OUT, f));
+        n++;
+      }
+    }
+    console.log(`Удалено устаревших файлов: ${n}`);
+  }
   if (DRY) return writeManifest();
   const keyName = PROVIDER === 'yandex' ? 'YANDEX_API_KEY' : 'ELEVENLABS_API_KEY';
   if (!process.env[keyName]) {

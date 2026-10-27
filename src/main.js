@@ -7,6 +7,10 @@ import { LocationScene } from './scenes/LocationScene.js';
 import { StudioScene } from './scenes/StudioScene.js';
 import { EndScene } from './scenes/EndScene.js';
 import { WarehouseScene } from './scenes/WarehouseScene.js';
+import { state } from './state.js';
+
+// Для автотестов и отладки из консоли
+window.__state = state;
 
 // Ждём шрифты (но не дольше 2 секунд), иначе первый текст отрисуется системным шрифтом
 async function loadFonts() {

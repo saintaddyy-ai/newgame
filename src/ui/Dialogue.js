@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { blip } from '../audio.js';
-import { playVoice, stopVoice } from '../voice.js';
+import { state } from '../state.js';
+import { playVoice, stopVoice, splitRemarks } from '../voice.js';
 
 const W = 960;
 const BOX_Y = 34;
@@ -55,12 +56,19 @@ export class Dialogue {
       wordWrap: { width: W - 100 },
       lineSpacing: 6,
     });
+    // Ремарка («шёпотом», «хватает за яйца») — серым рядом с именем, не озвучивается
+    this.remark = scene.add.text(0, BOX_Y + 5, '', {
+      fontFamily: '"PT Mono", monospace',
+      fontSize: '15px',
+      fontStyle: 'italic',
+      color: '#8f8ab0',
+    });
     this.arrow = scene.add.text(W - 58, BOX_Y + BOX_H - 34, '▼', { fontFamily: 'monospace', fontSize: '20px', color: '#ff3d8a' });
     scene.tweens.add({ targets: this.arrow, alpha: 0.2, duration: 400, yoyo: true, repeat: -1 });
     this.timerBar = scene.add.rectangle(20, BOX_Y + BOX_H + 8, W - 40, 6, 0xff3d8a).setOrigin(0).setVisible(false);
     this.portraitBg = scene.add.rectangle(34, BOX_Y + 22, 124, 124, 0x2a1b3d).setOrigin(0).setStrokeStyle(2, 0xff3d8a).setVisible(false);
     this.portrait = scene.add.image(36, BOX_Y + 24, '__DEFAULT').setOrigin(0).setVisible(false);
-    c.add([this.box, this.portraitBg, this.portrait, this.nameBg, this.name, this.body, this.arrow, this.timerBar]);
+    c.add([this.box, this.portraitBg, this.portrait, this.nameBg, this.name, this.remark, this.body, this.arrow, this.timerBar]);
     this.choiceItems = [];
 
     const kb = scene.input.keyboard;
@@ -140,7 +148,7 @@ export class Dialogue {
     let i = 0;
     this.typeEvent?.remove();
     this.typeEvent = this.scene.time.addEvent({
-      delay: 22,
+      delay: state.settings.textSpeed || 22,
       repeat: text.length - 1,
       callback: () => {
         i++;
@@ -158,13 +166,20 @@ export class Dialogue {
     this.arrow.setVisible(true);
   }
 
+  setRemark(remark) {
+    this.remark.setText(remark ? `(${remark})` : '');
+    this.remark.x = this.nameBg.visible ? this.nameBg.x + this.nameBg.width + 14 : TEXT_X;
+  }
+
   // Реплика персонажа
   say(name, text, color) {
     if (!this.active) this.open();
     this.clearChoices();
     this.setSpeaker(name, color);
-    this.type(text, { color: '#f2f0ff', fontStyle: 'normal' });
-    if (name) playVoice(name, text);
+    const { clean, remark } = splitRemarks(text);
+    this.setRemark(remark);
+    this.type(clean, { color: '#f2f0ff', fontStyle: 'normal' });
+    if (name) playVoice(name, clean);
     return new Promise((resolve) => (this.onAdvance = resolve));
   }
 
@@ -173,8 +188,10 @@ export class Dialogue {
     if (!this.active) this.open();
     this.clearChoices();
     this.setSpeaker(null);
-    this.type(text, { color: '#a9a6c8', fontStyle: 'italic' });
-    playVoice('think', text);
+    const { clean, remark } = splitRemarks(text);
+    this.setRemark(remark);
+    this.type(clean, { color: '#a9a6c8', fontStyle: 'italic' });
+    playVoice('think', clean);
     return new Promise((resolve) => (this.onAdvance = resolve));
   }
 
@@ -188,6 +205,7 @@ export class Dialogue {
     this.arrow.setVisible(false);
     this.body.setText('');
     this.setSpeaker('Твой выбор', '#ffd166');
+    this.setRemark('');
     // Больше трёх вариантов — строки плотнее, чтобы влезли в окно
     const dense = options.length > 3;
     const rowH = options.length > 5 ? 25 : dense ? 30 : 40;

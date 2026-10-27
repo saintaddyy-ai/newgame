@@ -2,6 +2,9 @@ import Phaser from 'phaser';
 import { state, TAGS, addLine } from '../state.js';
 import { BEAT, audioCtx, loadBuffer, playBuffer, playMusic, stopMusic, sfx } from '../audio.js';
 import { karaokeTimeline, saveDemo, playDemo } from '../demos.js';
+import { startCapture, encodeWav, processVoice } from '../studio/fx.js';
+
+const AUTOTUNE = { off: 'выкл', light: 'лёгкий', hard: 'жёсткий' };
 
 const PICK = 3;
 const VOICE_LEVEL = 0.03; // громкость, выше которой считаем, что игрок читает
@@ -31,8 +34,11 @@ export class StudioScene extends Phaser.Scene {
   }
 
   create(data = {}) {
-    // mode: 'prologue' — первый трек; 'rehearsal' — репетиция в финале Эпизода 1
+    // mode: 'prologue' — первый трек; 'rehearsal' — репетиция в финале Эпизода 1; 'track' — трек в Эпизоде 2
     this.mode = data.mode || 'prologue';
+    this.back = data.back || { loc: 'garage', spawnX: 780 };
+    this.trackTitle = data.title || null;
+    this.autotune = state.settings.autotune || 'off';
     this.picked = [];
     // Подстраховка: если строчек меньше трёх (часть продана Рею) — Дэн подкидывает свои
     const spare = [
@@ -87,9 +93,10 @@ export class StudioScene extends Phaser.Scene {
   // Кнопки внизу экрана. items: [{ label, color, onClick }]
   buttonsRow(items, y = 490) {
     this.buttons = items.map((it, i) => {
-      const x = 480 + (i - (items.length - 1) / 2) * 300;
+      const gap = items.length > 3 ? 228 : 300;
+      const x = 480 + (i - (items.length - 1) / 2) * gap;
       const b = this.add2(this.add.text(x, y, `${i + 1}. ${it.label}`, {
-        fontFamily: PIXEL, fontSize: '13px', color: '#0c0a16', backgroundColor: it.color || '#ffd166', padding: { x: 14, y: 12 },
+        fontFamily: PIXEL, fontSize: items.length > 3 ? '11px' : '13px', color: '#0c0a16', backgroundColor: it.color || '#ffd166', padding: { x: items.length > 3 ? 10 : 14, y: 12 },
       }).setOrigin(0.5));
       b.setInteractive({ useHandCursor: true }).on('pointerdown', () => it.onClick());
       b.on('pointerover', () => b.setScale(1.05)).on('pointerout', () => b.setScale(1));
@@ -105,6 +112,40 @@ export class StudioScene extends Phaser.Scene {
       return;
     }
     if (this.buttons?.length && n >= 1 && n <= this.buttons.length) this.buttons[n - 1].onClick();
+    if ((ev.key === 'a' || ev.key === 'ф') && (this.phase === 'setup' || this.phase === 'result')) this.cycleAutotune();
+    if ((ev.key === 'h' || ev.key === 'р') && this.phase === 'setup') this.toggleHeadphones();
+  }
+
+  cycleAutotune() {
+    const order = ['off', 'light', 'hard'];
+    this.autotune = order[(order.indexOf(this.autotune) + 1) % 3];
+    state.settings.autotune = this.autotune;
+    sfx('click');
+    if (this.phase === 'result' && this.raw) return this.remix();
+    if (this.phase === 'setup') this.showSetup(true);
+  }
+
+  toggleHeadphones() {
+    state.settings.headphones = !state.settings.headphones;
+    // Другие настройки звука — заново спрашиваем микрофон
+    this.stream?.getTracks().forEach((t) => t.stop());
+    this.stream = null;
+    this.analyser = null;
+    sfx('click');
+    this.showSetup(true);
+  }
+
+  // Строка настроек студии: наушники и автотюн (кликабельные)
+  studioOptions(y) {
+    const hp = state.settings.headphones;
+    const a = this.add2(this.add.text(300, y, `[H] Наушники: ${hp ? 'да — чистый студийный звук' : 'нет — с подавлением эха'}`, {
+      fontFamily: FONT, fontSize: '16px', color: hp ? '#8ae6a0' : '#ffd166',
+    }).setOrigin(0.5));
+    const b = this.add2(this.add.text(700, y, `[A] Автотюн: ${AUTOTUNE[this.autotune]}`, {
+      fontFamily: FONT, fontSize: '16px', color: this.autotune === 'off' ? '#c9c4ee' : '#ff3d8a',
+    }).setOrigin(0.5));
+    a.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.phase === 'setup' && this.toggleHeadphones());
+    b.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.cycleAutotune());
   }
 
   // ---------- 1. Выбор строчек ----------
@@ -158,23 +199,62 @@ export class StudioScene extends Phaser.Scene {
 
   // ---------- 2. Подготовка: микрофон ----------
 
-  showSetup() {
-    if (this.phase !== 'pick' || this.picked.length < PICK) return;
-    sfx('select');
+  showSetup(refresh = false) {
+    if (!refresh && (this.phase !== 'pick' || this.picked.length < PICK)) return;
+    if (!refresh) sfx('select');
     this.phase = 'setup';
     this.clearUi();
-    this.title('К МИКРОФОНУ', 'Сейчас ты зачитаешь эти строчки под бит Дэна — по-настоящему, своим голосом.\nСтрочки будут подсвечиваться, как в караоке. Лучше в наушниках.');
+    this.title('К МИКРОФОНУ', 'Сейчас ты зачитаешь эти строчки под бит Дэна — по-настоящему, своим голосом.\nСтрочки будут подсвечиваться, как в караоке.');
     this.picked.forEach((l, i) => {
-      this.add2(this.add.text(480, 200 + i * 50, `«${l.text}»`, { fontFamily: FONT, fontSize: '22px', color: TAGS[l.tag].color, fontStyle: 'italic' }).setOrigin(0.5));
+      this.add2(this.add.text(480, 170 + i * 44, `«${l.text}»`, { fontFamily: FONT, fontSize: '21px', color: TAGS[l.tag].color, fontStyle: 'italic' }).setOrigin(0.5));
     });
-    this.add2(this.add.text(480, 380, 'Сначала будет отсчёт — 2 такта. Каждая строчка звучит 2 такта, весь куплет — два круга.', {
-      fontFamily: FONT, fontSize: '16px', color: '#77729a',
+    this.add2(this.add.text(480, 316, 'Сначала отсчёт — 2 такта. Каждая строчка звучит 2 такта, весь куплет — два круга.', {
+      fontFamily: FONT, fontSize: '15px', color: '#77729a',
     }).setOrigin(0.5));
+    this.studioOptions(356);
+    this.add2(this.add.text(480, 392, 'В наушниках звук пишется без эхо- и шумоподавления: компрессор, эквалайзер, реверб и дилей — потом, как в студии.', {
+      fontFamily: FONT, fontSize: '13px', color: '#5a5570', align: 'center', wordWrap: { width: 860 },
+    }).setOrigin(0.5));
+    this.testMeter = null;
     this.buttonsRow([
-      { label: '● С МИКРОФОНОМ', color: '#ff3d3d', onClick: () => this.startRecording(true) },
-      { label: 'БЕЗ МИКРОФОНА', color: '#c9c4ee', onClick: () => this.startRecording(false) },
+      { label: '● ЗАПИСЬ', color: '#ff3d3d', onClick: () => this.startRecording(true) },
+      { label: 'БЕЗ ГОЛОСА', color: '#c9c4ee', onClick: () => this.startRecording(false) },
+      { label: 'ТЕСТ МИКРО', color: '#3df0ff', onClick: () => this.micTest() },
       { label: 'НАЗАД', color: '#77729a', onClick: () => this.backToPick() },
     ]);
+  }
+
+  // Тест микрофона: 3 секунды голоса — и сразу слышно, как он звучит после обработки
+  async micTest() {
+    if (this.phase !== 'setup' || this.testing) return;
+    this.testing = true;
+    sfx('click');
+    const ok = this.stream ? true : await this.getMic();
+    if (!ok) {
+      this.testing = false;
+      sfx('deny');
+      return this.hint?.setText('Микрофон недоступен. Можно записать без голоса.');
+    }
+    const ctx = audioCtx();
+    const label = this.add2(this.add.text(480, 440, 'Скажи что-нибудь… 3', { fontFamily: PIXEL, fontSize: '14px', color: '#3df0ff' }).setOrigin(0.5));
+    const cap = startCapture(ctx, this.stream);
+    for (const n of [2, 1]) {
+      await new Promise((r) => this.time.delayedCall(1000, r));
+      label.active && label.setText(`Скажи что-нибудь… ${n}`);
+    }
+    await new Promise((r) => this.time.delayedCall(1000, r));
+    const { data, sampleRate } = cap.stop();
+    label.active && label.setText('Сведение…');
+    const processed = await processVoice(data, sampleRate, { autotune: this.autotune });
+    if (!label.active) return (this.testing = false);
+    label.setText('▶ Так звучит твой голос в студии');
+    const buf = ctx.createBuffer(1, processed.length, sampleRate);
+    buf.copyToChannel(processed, 0);
+    playBuffer(buf, { volume: 1.3 });
+    this.time.delayedCall(buf.duration * 1000 + 300, () => {
+      label.active && label.destroy();
+      this.testing = false;
+    });
   }
 
   backToPick() {
@@ -185,7 +265,11 @@ export class StudioScene extends Phaser.Scene {
 
   async getMic() {
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      // В наушниках эхо нет — пишем голос как есть, без «телефонной» обработки браузера
+      const clean = !!state.settings.headphones;
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        audio: { echoCancellation: !clean, noiseSuppression: !clean, autoGainControl: !clean, channelCount: 1 },
+      });
       const ctx = audioCtx();
       const src = ctx.createMediaStreamSource(this.stream);
       this.analyser = ctx.createAnalyser();
@@ -237,18 +321,13 @@ export class StudioScene extends Phaser.Scene {
     this.voiced = 0;
     this.lineFrames = 0;
     this.blob = null;
+    this.rawBlob = null;
     this.voiceAt = 0;
-    this.chunks = [];
 
     // Запуск записи и бита — голос потом ляжет на бит по разнице времени
-    if (micOk && window.MediaRecorder) {
-      this.recorder = new MediaRecorder(this.stream);
-      this.recorder.ondataavailable = (e) => e.data.size && this.chunks.push(e.data);
-      this.recorder.onstart = () => (this.recStart = ctx.currentTime);
-      this.recorder.start();
-    } else {
-      this.recorder = null;
-    }
+    this.raw = null;
+    this.processed = null;
+    this.recorder = micOk ? startCapture(ctx, this.stream) : null;
     this.t0 = ctx.currentTime + 0.3;
     this.beat = playBuffer(beat, { offset: this.tl.beatFrom, when: this.t0, volume: 0.8 });
 
@@ -333,7 +412,7 @@ export class StudioScene extends Phaser.Scene {
     }
 
     // Голос — на индикаторе и искрами
-    this.meter.height = Phaser.Math.Clamp(level * 1400, 0, 200);
+    this.meter.setSize(14, Phaser.Math.Clamp(level * 1400, 0, 200));
     this.meter.setFillStyle(level > VOICE_LEVEL ? 0x3df0ff : 0x3a3550);
     if (level > VOICE_LEVEL * 2 && Math.random() < 0.3) {
       const sp = this.add.image(920, 420 - this.meter.height, 'spark').setTint(0x3df0ff).setScale(1.5);
@@ -347,7 +426,7 @@ export class StudioScene extends Phaser.Scene {
       this.cameras.main.zoomTo(1.015, 40, 'Linear', true);
       this.time.delayedCall(60, () => this.cameras.main.zoomTo(1, 120, 'Linear', true));
     }
-    this.prog.width = 760 * Phaser.Math.Clamp(t / tl.length, 0, 1);
+    this.prog.setSize(Math.max(1, 760 * Phaser.Math.Clamp(t / tl.length, 0, 1)), 6);
 
     if (t >= tl.length) this.finishRecording();
   }
@@ -356,15 +435,37 @@ export class StudioScene extends Phaser.Scene {
     this.phase = 'finishing';
     this.beat?.stop(0.3);
     if (this.recorder) {
-      await new Promise((r) => {
-        this.recorder.onstop = r;
-        this.recorder.stop();
-      });
-      this.blob = new Blob(this.chunks, { type: this.recorder.mimeType || 'audio/webm' });
-      this.voiceAt = (this.recStart ?? this.t0) - this.t0;
+      const ctx = audioCtx();
+      const rec = this.recorder.stop();
+      this.recorder = null;
+      this.raw = rec;
+      // Голос приходит позже бита на задержку вывода (наушники) и ввода (микрофон)
+      const latency = (ctx.outputLatency || ctx.baseLatency || 0) + 0.015;
+      this.voiceAt = rec.startedAt - this.t0 - latency;
+      this.clearUi();
+      this.title('СВЕДЕНИЕ', 'Компрессор, эквалайзер, де-эссер, реверб, дилей, дабл…');
+      await new Promise((r) => this.time.delayedCall(60, r));
+      await this.mixVoice();
     }
     // Подача: какую долю времени строк игрок реально звучал
-    this.score = this.blob ? Math.min(100, Math.round(((this.voiced / Math.max(1, this.lineFrames)) / 0.6) * 100)) : null;
+    this.score = this.raw ? Math.min(100, Math.round(((this.voiced / Math.max(1, this.lineFrames)) / 0.6) * 100)) : null;
+    this.showResult();
+  }
+
+  async mixVoice() {
+    const { data, sampleRate } = this.raw;
+    this.processed = await processVoice(data, sampleRate, { autotune: this.autotune });
+    this.blob = encodeWav(this.processed, sampleRate);
+    this.rawBlob = encodeWav(data, sampleRate);
+  }
+
+  async remix() {
+    this.previewStop();
+    this.phase = 'mixing';
+    this.clearUi();
+    this.title('СВЕДЕНИЕ', `Автотюн: ${AUTOTUNE[this.autotune]}`);
+    await new Promise((r) => this.time.delayedCall(60, r));
+    await this.mixVoice();
     this.showResult();
   }
 
@@ -384,22 +485,25 @@ export class StudioScene extends Phaser.Scene {
     } else {
       this.add2(this.add.text(480, 230, 'Записано без голоса — только бит и текст.', { fontFamily: FONT, fontSize: '22px', color: '#c9c4ee' }).setOrigin(0.5));
     }
-    this.add2(this.add.text(480, 340, 'Послушай, перезапиши, если не нравится, или сохрани на комп Дэна.', { fontFamily: FONT, fontSize: '17px', color: '#77729a' }).setOrigin(0.5));
-    this.buttonsRow([
-      { label: '▶ ПОСЛУШАТЬ', color: '#3df0ff', onClick: () => this.preview() },
-      { label: '↻ ПЕРЕЗАПИСАТЬ', color: '#c9c4ee', onClick: () => this.startRecording(!!this.stream) },
-      { label: '✓ СОХРАНИТЬ', color: '#ffd166', onClick: () => this.save() },
-    ]);
+    this.add2(this.add.text(480, 330, 'Послушай до и после сведения, перезапиши или сохрани на комп Дэна.', { fontFamily: FONT, fontSize: '17px', color: '#77729a' }).setOrigin(0.5));
+    if (this.raw) this.studioOptions(380);
+    const rows = [{ label: this.raw ? '▶ ПОСЛЕ' : '▶ ПОСЛУШАТЬ', color: '#3df0ff', onClick: () => this.preview() }];
+    if (this.raw) rows.push({ label: '▶ ДО', color: '#9ab0ff', onClick: () => this.preview(true) });
+    rows.push({ label: '↻ ЗАНОВО', color: '#c9c4ee', onClick: () => this.startRecording(!!this.stream) });
+    rows.push({ label: '✓ СОХРАНИТЬ', color: '#ffd166', onClick: () => this.save() });
+    this.buttonsRow(rows);
   }
 
-  demoData() {
+  demoData(before = false) {
     const theme = trackTheme(this.picked);
+    const base = this.trackTitle || TITLES[theme];
     return {
-      title: this.mode === 'rehearsal' ? `${TITLES[theme]} (репетиция)` : TITLES[theme],
+      title: this.mode === 'rehearsal' ? `${base} (репетиция)` : base,
       theme,
       lines: this.picked.map((l) => ({ ...l })),
       items: this.tl.items,
-      voice: this.blob,
+      voice: before ? this.rawBlob : this.blob,
+      autotune: this.autotune,
       voiceAt: this.voiceAt,
       beatFrom: this.tl.beatFrom,
       length: this.tl.length,
@@ -407,10 +511,13 @@ export class StudioScene extends Phaser.Scene {
     };
   }
 
-  async preview() {
-    if (this.previewing) return this.previewStop();
+  async preview(before = false) {
+    const was = this.previewing;
+    this.previewStop();
+    if (was && this.previewBefore === before) return;
     sfx('click');
-    this.previewing = await playDemo(this.demoData());
+    this.previewBefore = before;
+    this.previewing = await playDemo(this.demoData(before));
     if (this.previewing) this.time.delayedCall(this.tl.length * 1000, () => (this.previewing = null));
   }
 
@@ -428,6 +535,7 @@ export class StudioScene extends Phaser.Scene {
     await saveDemo(demo);
     state.tracks.push({ title: demo.title, theme: demo.theme, lines: demo.lines, voice: !!demo.voice, score: demo.score });
     if (this.mode === 'rehearsal') state.flags.e1Rehearsal = true;
+    else if (this.mode === 'track') state.flags.lastTrack = { title: demo.title, theme: demo.theme, score: demo.score };
     else state.flags.trackDone = true;
     if (demo.theme === 'pain') state.stats.honesty += 1;
     if (demo.theme === 'street') state.stats.fame += 1;
@@ -437,7 +545,7 @@ export class StudioScene extends Phaser.Scene {
     sfx('line');
     this.time.delayedCall(1300, () => {
       this.cameras.main.fadeOut(500, 7, 6, 13);
-      this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Location', { loc: 'garage', spawnX: 780 }));
+      this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Location', this.back));
     });
   }
 
@@ -455,8 +563,9 @@ export class StudioScene extends Phaser.Scene {
     this.beat?.stop(0.1);
     this.previewStop();
     try {
-      if (this.recorder?.state === 'recording') this.recorder.stop();
+      this.recorder?.stop();
     } catch (e) {}
+    this.recorder = null;
     this.stream?.getTracks().forEach((t) => t.stop());
     this.stream = null;
     this.analyser = null;
@@ -466,7 +575,7 @@ export class StudioScene extends Phaser.Scene {
     if (this.phase === 'rec') this.updateRecording();
     const beat = (time / (60000 / BEAT.bpm)) % 1;
     this.bars.forEach((b, i) => {
-      b.height = 20 + Math.abs(Math.sin(time / 300 + i * 0.7)) * 70 * (1.2 - beat) + (i % 7) * 6;
+      b.setSize(14, 20 + Math.abs(Math.sin(time / 300 + i * 0.7)) * 70 * (1.2 - beat) + (i % 7) * 6);
     });
   }
 }

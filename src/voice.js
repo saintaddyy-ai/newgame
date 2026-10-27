@@ -2,6 +2,25 @@
 // а manifest.json перечисляет, какие реплики уже озвучены. Нет файла — реплика идёт молча.
 import { audioCtx, loadBuffer, playBuffer } from './audio.js';
 
+// Ремарки в скобках («(шёпотом) …») не озвучиваются и показываются отдельной строкой
+export function splitRemarks(text) {
+  const remarks = [];
+  const clean = text
+    .replace(/\(([^)]*)\)/g, (_, r) => {
+      remarks.push(r.trim());
+      return ' ';
+    })
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([.,!?…»])/g, '$1')
+    .trim();
+  return { clean, remark: remarks.join(' · ') };
+}
+
+// Помечает набор реплик для озвучки: voiced('Дэн', { new: '…', old: '…' }) — скрипт найдёт их по этому вызову
+export function voiced(speaker, lines) {
+  return lines;
+}
+
 // FNV-1a по UTF-16 — одинаково считается и в браузере, и в Node (scripts/voice.mjs)
 export function lineId(speaker, text) {
   let h = 0x811c9dc5;

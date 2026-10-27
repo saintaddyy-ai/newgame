@@ -4,7 +4,17 @@
 let ctx = null;
 let master = null;
 let sfxBus = null;
+let musicBus = null;
 let noiseBuf = null;
+const levels = { music: 0.8, sfx: 0.7 };
+
+// Громкость из настроек телефона
+export function setVolumes({ music, sfx: fx } = {}) {
+  if (music !== undefined) levels.music = music;
+  if (fx !== undefined) levels.sfx = fx;
+  if (musicBus) musicBus.gain.value = levels.music / 0.8;
+  if (sfxBus) sfxBus.gain.value = levels.sfx;
+}
 
 export const BEAT = {
   url: './audio/beat-yagoda.mp3',
@@ -27,8 +37,11 @@ export function unlockAudio() {
       master.gain.value = 0.8;
       master.connect(ctx.destination);
       sfxBus = ctx.createGain();
-      sfxBus.gain.value = 0.7;
+      sfxBus.gain.value = levels.sfx;
       sfxBus.connect(master);
+      musicBus = ctx.createGain();
+      musicBus.gain.value = levels.music / 0.8;
+      musicBus.connect(master);
       noiseBuf = ctx.createBuffer(1, ctx.sampleRate * 2, ctx.sampleRate);
       const data = noiseBuf.getChannelData(0);
       for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
@@ -108,7 +121,7 @@ export async function playMusic(url, opts = {}) {
   stopMusic(0.2);
   const buf = await loadBuffer(url);
   if (!buf) return null;
-  music = playBuffer(buf, opts);
+  music = playBuffer(buf, { dest: musicBus, ...opts });
   return music;
 }
 
@@ -315,6 +328,63 @@ const SFX = {
   },
   tick: (t) => tone(t, 1600, 0.04, { type: 'square', vol: 0.06 }),
   tickHi: (t) => tone(t, 2400, 0.05, { type: 'square', vol: 0.08 }),
+  // ---- Телефон ----
+  buzz: (t) => [0, 0.32].forEach((d) => {
+    tone(t + d, 160, 0.22, { type: 'sawtooth', vol: 0.05 });
+    noise(t + d, 0.22, { type: 'lowpass', freq: 220, vol: 0.12 });
+  }),
+  notify: (t) => [0, 0.09].forEach((d, i) => tone(t + d, [1320, 1760][i], 0.12, { vol: 0.07 })),
+  tap: (t) => tone(t, 2200, 0.02, { vol: 0.04 }),
+  phoneOpen: (t) => {
+    noise(t, 0.18, { type: 'bandpass', freq: 900, to: 2400, q: 1, vol: 0.06, attack: 0.05 });
+    tone(t + 0.12, 1046, 0.08, { vol: 0.04 });
+  },
+  phoneClose: (t) => noise(t, 0.16, { type: 'bandpass', freq: 2200, to: 700, q: 1, vol: 0.05, attack: 0.04 }),
+  shutter: (t) => {
+    noise(t, 0.03, { type: 'highpass', freq: 3000, vol: 0.25 });
+    noise(t + 0.07, 0.04, { type: 'bandpass', freq: 1800, q: 2, vol: 0.2 });
+  },
+  ring: (t) => [0, 0.45].forEach((d) => {
+    tone(t + d, 425, 0.38, { vol: 0.05 });
+  }),
+  dial: (t) => tone(t, 425, 0.9, { vol: 0.04 }),
+  hangup: (t) => [0, 0.2, 0.4].forEach((d) => tone(t + d, 425, 0.12, { vol: 0.04 })),
+  ringtone: (t) => [0, 0.14, 0.28, 0.56, 0.7].forEach((d, i) => tone(t + d, [988, 1319, 1568, 1319, 1976][i], 0.12, { type: 'square', vol: 0.03 })),
+  // ---- Улица и город ----
+  coo: (t) => [0, 0.22].forEach((d) => tone(t + d, 420, 0.2, { vol: 0.05, to: 330 })),
+  flap: (t) => [0, 0.06, 0.12, 0.18, 0.24].forEach((d) => noise(t + d, 0.05, { type: 'bandpass', freq: 700, q: 1, vol: 0.12 })),
+  meow: (t) => {
+    tone(t, 700, 0.15, { type: 'triangle', vol: 0.08, to: 1100 });
+    tone(t + 0.13, 1100, 0.3, { type: 'triangle', vol: 0.07, to: 600 });
+  },
+  siren: (t) => [0, 0.5, 1, 1.5].forEach((d, i) => tone(t + d, i % 2 ? 660 : 880, 0.48, { type: 'sawtooth', vol: 0.025 })),
+  subway: (t) => {
+    noise(t, 2.6, { type: 'lowpass', freq: 300, to: 900, vol: 0.18, attack: 1.2 });
+    tone(t + 1.6, 1100, 0.9, { vol: 0.02, to: 900 });
+  },
+  chime: (t) => [0, 0.35, 0.7].forEach((d, i) => tone(t + d, [784, 659, 523][i], 0.4, { vol: 0.06 })),
+  cheer: (t) => {
+    noise(t, 1.6, { type: 'bandpass', freq: 1400, q: 0.5, vol: 0.18, attack: 0.15 });
+    noise(t + 0.1, 1.4, { type: 'bandpass', freq: 3200, q: 0.8, vol: 0.08, attack: 0.2 });
+  },
+  boo: (t) => {
+    tone(t, 160, 1.1, { type: 'sawtooth', vol: 0.04, to: 120, attack: 0.2 });
+    noise(t, 1.1, { type: 'lowpass', freq: 500, vol: 0.1, attack: 0.2 });
+  },
+  clap: (t) => [0, 0.12, 0.2, 0.33, 0.41, 0.55].forEach((d) => noise(t + d, 0.04, { type: 'bandpass', freq: 1600, q: 1, vol: 0.18 })),
+  glass: (t) => [0, 0.03].forEach((d, i) => tone(t + d, [2637, 3520][i], 0.3, { vol: 0.04 })),
+  spray2: (t) => noise(t, 0.5, { type: 'highpass', freq: 4000, vol: 0.06, attack: 0.05 }),
+  scissors: (t) => [0, 0.15, 0.3].forEach((d) => noise(t + d, 0.05, { type: 'highpass', freq: 5000, vol: 0.12 })),
+  needle: (t) => tone(t, 180, 1.2, { type: 'sawtooth', vol: 0.025 }),
+  sizzle: (t) => noise(t, 0.9, { type: 'highpass', freq: 2500, vol: 0.06, attack: 0.1 }),
+  pour: (t) => noise(t, 0.7, { type: 'bandpass', freq: 900, to: 1800, q: 2, vol: 0.06, attack: 0.1 }),
+  vape: (t) => noise(t, 1.1, { type: 'bandpass', freq: 1200, q: 0.6, vol: 0.05, attack: 0.3 }),
+  punch: (t) => {
+    tone(t, 90, 0.18, { vol: 0.35, to: 50 });
+    noise(t, 0.08, { type: 'lowpass', freq: 1200, vol: 0.2 });
+  },
+  run: (t) => [0, 0.14, 0.28, 0.42].forEach((d) => noise(t + d, 0.05, { type: 'bandpass', freq: 700, q: 1, vol: 0.12 })),
+  whistle: (t) => tone(t, 2400, 0.5, { vol: 0.05, to: 2900 }),
 };
 
 export function sfx(name, delay = 0) {

@@ -1,62 +1,19 @@
 import { BEAT, audioCtx, loadBuffer, decodeBlob, playBuffer } from './audio.js';
+import { dbPut, dbAll, dbDelete } from './db.js';
 
-// Демки на компе Дэна. Хранятся в браузере игрока (IndexedDB), поэтому переживают перезапуск игры.
-// Если хранилище недоступно (приватный режим и т. п.), держим их в памяти до закрытия вкладки.
-
-const DB = 'platina';
-const STORE = 'demos';
-const memory = [];
-
-function open() {
-  return new Promise((resolve, reject) => {
-    try {
-      const req = indexedDB.open(DB, 1);
-      req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: 'id' });
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error);
-    } catch (e) {
-      reject(e);
-    }
-  });
-}
-
-function tx(db, mode, fn) {
-  return new Promise((resolve, reject) => {
-    const t = db.transaction(STORE, mode);
-    const r = fn(t.objectStore(STORE));
-    t.oncomplete = () => resolve(r?.result);
-    t.onerror = () => reject(t.error);
-  });
-}
+// Демки на компе Дэна. Хранятся в браузере игрока, поэтому переживают перезапуск игры.
 
 // demo: { title, theme, lines, voice: Blob|null, voiceAt: сек в бите, где начался голос, beatFrom, length, score }
 export async function saveDemo(demo) {
-  const rec = { ...demo, id: `demo_${Date.now()}`, createdAt: Date.now() };
-  try {
-    const db = await open();
-    await tx(db, 'readwrite', (s) => s.put(rec));
-  } catch (e) {
-    memory.push(rec);
-  }
-  return rec;
+  return dbPut('demos', { ...demo, id: `demo_${Date.now()}`, createdAt: Date.now() });
 }
 
 export async function listDemos() {
-  let list = [];
-  try {
-    const db = await open();
-    list = await tx(db, 'readonly', (s) => s.getAll());
-  } catch (e) {}
-  return [...(list || []), ...memory].sort((a, b) => b.createdAt - a.createdAt);
+  return dbAll('demos');
 }
 
 export async function deleteDemo(id) {
-  const i = memory.findIndex((d) => d.id === id);
-  if (i >= 0) memory.splice(i, 1);
-  try {
-    const db = await open();
-    await tx(db, 'readwrite', (s) => s.delete(id));
-  } catch (e) {}
+  return dbDelete('demos', id);
 }
 
 // ---------- Таймлайн караоке и воспроизведение ----------

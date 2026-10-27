@@ -2,6 +2,9 @@
 // Пути к деньгам: А — склад, Б — мама, В — Рей, Г (секретный) — отцовские часы. Потом барахолка и репетиция.
 import Phaser from 'phaser';
 import { state, hasItem, takeItem, saveGame } from '../state.js';
+import { voiced } from '../voice.js';
+import { setLyubaCall } from './phoneStory.js';
+import { receive } from '../phone/model.js';
 import { drawApartment, drawYard, drawGarage, drawWarehouse, drawPawnshop, drawFlea } from './backdrops.js';
 import { BATHROOM } from './shared.js';
 import { posterView } from './prologue.js';
@@ -22,10 +25,50 @@ export const PHASES = {
 };
 
 const phase = () => F.e1;
-const setPhase = (p) => (F.e1 = p);
+// Марочка действует несколько часов: текущая фаза и следующая, сон обрывает сразу
+const setPhase = (p) => {
+  F.e1 = p;
+  if (F.acidNow && --F.acidLeft <= 0) endAcid();
+};
 const isNight = () => ['tue_night', 'wed_night', 'final', 'outro'].includes(phase());
 const isDay = () => ['wed', 'thu'].includes(phase());
 const rayAtArch = () => ['tue_night', 'wed_night', 'thu_eve', 'outro'].includes(phase());
+const dayOf = (p) => (p.startsWith('tue') ? 'tue' : p.startsWith('wed') ? 'wed' : 'thu');
+
+function startAcid() {
+  F.triedLSD = true;
+  F.acidNow = true;
+  F.acidLeft = 2;
+  F.acidDay = dayOf(phase());
+  state.stats.addiction += 1;
+}
+
+function endAcid() {
+  F.acidNow = false;
+  F.acidLeft = 0;
+}
+
+// Вчера была марочка, а сегодня уже отпустило
+const acidYesterday = () => F.triedLSD && !F.acidNow && F.acidDay && F.acidDay !== dayOf(phase());
+
+// Марочка «на потом» из кармана — съесть, когда сам решишь
+export const ITEM_USE = {
+  async marka(ctx) {
+    const { d, acid, line, fx } = ctx;
+    if (F.acidNow) return d.think('Хватит. Меня и так ещё несёт.');
+    await d.think('Марочка Рея. Маленький квадратик с улыбающимся солнцем.');
+    const c = await d.choose(['[Положить под язык]', 'Нет. Не сейчас.']);
+    if (c === 1) return d.think('Убираю обратно в карман. Пусть лежит.');
+    takeItem('marka');
+    F.markaInInventory = false;
+    startAcid();
+    fx.screenFlash(0xff7ab8, 500);
+    acid(true);
+    await d.think('Бумажка горчит. Минут через двадцать стены начинают дышать в такт чему-то, чего я не слышу.');
+    line({ id: 'acid_concrete', text: 'Бетон течёт, а я стою на месте', tag: 'pain' });
+    line({ id: 'acid_bubble', text: 'Мой город — это пузырь, и я в нём лопаюсь', tag: 'dream' });
+  },
+};
 
 export const MICS = [
   { id: 'stolen', name: '«Подозрительно дешёвый»', price: 2000 },
@@ -33,6 +76,26 @@ export const MICS = [
   { id: 'oktava', name: '«Октава», б/у', price: 6000 },
   { id: 'shure', name: '«Шур» с рук', price: 9000 },
   { id: 'new', name: 'Новый, в коробке', price: 15000 },
+];
+
+const momHome = () => phase() === 'wed_night';
+
+// Свет фонарей, подъезда, гаража и арки
+const YARD_LAMPS = () => [
+  { x: 155, y: 238, r: 120, color: 0xfff0b0, cone: true },
+  { x: 506, y: 210, r: 130, color: 0xffe0a0, cone: true, flicker: true },
+  { x: 1346, y: 210, r: 130, color: 0xffe0a0, cone: true },
+  { x: 2017, y: 440, r: 120, color: 0xffd27a },
+  { x: 2515, y: 212, r: 120, color: 0xffe0a0, cone: true },
+  { x: 236, y: 170, r: 40, color: 0xffd27a, nightOnly: true },
+  { x: 2222, y: 170, r: 40, color: 0xffd27a, nightOnly: true },
+];
+
+// Места для фото с телефона
+const YARD_PHOTOS = [
+  { id: 'e1_graffiti', x: 1400, text: 'Граффити «ТЕНЬ» в кадре. Обложка сама просится.' },
+  { id: 'e1_garages', x: 1950, line: { id: 'photo_garages', text: 'Ряд гаражей — как клавиши, на которых никто не играет', tag: 'street' } },
+  { id: 'e1_arch', x: 2515, text: 'Фонарь над аркой и мокрый асфальт. Кадр как из клипа.' },
 ];
 
 // Старт эпизода (после пролога или из меню глав)
@@ -64,22 +127,29 @@ export const LOCATIONS = {
     ambience: 'garage',
     steps: 'stepConcrete',
     draw: (s) => drawGarage(s, 1100),
+    lamps: [{ x: 720, y: 72, r: 150, color: 0xffe8a8, alpha: 0.4 }, { x: 730, y: 371, r: 50, color: 0x3df0ff, alpha: 0.35 }],
     doors: [{ id: 'gate', x: 69, w: 122, h: 228, metal: true, color: 0x4a505c }],
 
     async onEnter(ctx) {
+      if (F.garageWake && F.garageWake === phase()) return garageMorning(ctx);
       if (phase() === 'tue' && !F.e1MicBroke) return micBreaks(ctx);
       if (phase() === 'final' && F.e1Rehearsal && !F.e1FinaleTalk) return afterRehearsal(ctx);
-      if (hasItem('mic') && phase() !== 'final') return finale(ctx);
-      if (phase() === 'thu_eve' && !hasItem('mic')) return toyMic(ctx);
+      // Репетиция — только в четверг вечером, даже если микрофон купили раньше
+      if (phase() === 'thu_eve') return hasItem('mic') ? finale(ctx) : toyMic(ctx);
+      if (hasItem('mic') && !F.danSawMic && ['wed', 'wed_night', 'thu'].includes(phase())) return micEarly(ctx);
     },
 
     npcs: [
       {
         id: 'dan', name: 'Дэн', sprite: 'dan', x: 880, flip: true,
-        async talk({ d }) {
+        async talk(ctx) {
+          const { d } = ctx;
           if (phase() === 'tue') return d.say('Дэн', 'Иди, брат. Подумай ночью. Утро вечера мудренее — так бабушка говорила.');
           if (phase() === 'final' || phase() === 'outro') return d.say('Дэн', 'Иди спи. Завтра в восемь. И не смей опаздывать.');
+          if (phase() === 'thu' && hasItem('mic')) return waitForEvening(ctx);
+          if (hasItem('mic')) return d.say('Дэн', 'Микро есть — я спокоен. Репетиция завтра вечером. Береги его, как бабушкин ковёр.');
           if (F.reyDebt) await d.say('Дэн', 'Слышал, ты у Рея занял. Он уже всем рассказал. Он всем всё рассказывает.');
+          if (phase() === 'tue_night' || phase() === 'wed_night') return d.say('Дэн', 'Ночь, брат. Хочешь — оставайся на диване. Только не храпи, как в прошлый раз.');
           await d.say('Дэн', 'Без микро не приходи, брат. Время тикает. Барахолка у станции до восьми.');
         },
       },
@@ -98,7 +168,15 @@ export const LOCATIONS = {
         },
       },
       {
-        x: 300, label: 'Ковёр', sfx: 'thump',
+        x: 210, label: () => (['tue_night', 'wed_night'].includes(phase()) ? 'Диван: переночевать у Дэна' : 'Диван'), sfx: 'bed',
+        async use(ctx) {
+          if (['tue_night', 'wed_night'].includes(phase())) return sleepInGarage(ctx);
+          ctx.fx.dust(300, 380, 260);
+          await ctx.d.think('Диван, на котором написано больше треков, чем в студиях всего района.');
+        },
+      },
+      {
+        x: 370, y: 110, label: 'Ковёр', range: 60, sfx: 'thump',
         async use({ d, fx }) {
           fx.dust(300, 210, 260);
           await d.think('Ковёр от Дэновой бабушки. Если продать — тысячи три. Нет. Это святое.');
@@ -138,14 +216,17 @@ export const LOCATIONS = {
     steps: 'stepWet',
     night: () => isNight(),
     draw: (s) => drawYard(s, 2700, {
-      merc: rayAtArch() && phase() !== 'outro',
+      merc: true,
       openMic: ['thu', 'thu_eve', 'final', 'outro'].includes(phase()),
       barberSign: ['thu', 'thu_eve', 'final', 'outro'].includes(phase()),
     }),
+    lamps: YARD_LAMPS,
+    critters: () => (isDay() ? [{ type: 'pigeons', x: 1180, n: 4 }, { type: 'cat', x: 1700, y: 244, depth: 4 }] : [{ type: 'cat', x: 1700, y: 244, depth: 4 }]),
+    photoSpots: YARD_PHOTOS,
     doors: [{ id: 'entrance', x: 155, w: 126, h: 208, color: 0x3a4658 }],
 
     async onEnter(ctx) {
-      if (phase() === 'tue_night' && !F.rayMet) return rayMeeting(ctx);
+      if (['tue_night', 'wed_night'].includes(phase()) && !F.rayMet) return rayMeeting(ctx);
       if (phase() === 'outro') return outro(ctx);
     },
 
@@ -162,24 +243,12 @@ export const LOCATIONS = {
       {
         id: 'kid', name: 'Пацан', sprite: 'kid', x: 760,
         when: () => isDay(),
-        async talk({ d, sfx: play }) {
-          play('ball');
-          if (F.rayOffended) {
-            await d.say('Пацан', 'Тот, в леопардовом… он мой мяч в лужу пнул. Он больной?');
-            const c = await d.choose(['Больной. Держись от него подальше.', 'Не бери в голову.']);
-            if (c === 0) F.protectKid = true;
-            return d.say('Пацан', c === 0 ? 'Ладно… А ты его не боишься?' : 'Ага. Тебе легко говорить.');
-          }
-          await d.say('Пацан', 'Тень! Ты в пятницу в «Подвале»? Нас не пустят, нам по двенадцать. Запиши потом, а?');
-        },
+        talk: kidTalk,
       },
       {
         id: 'granny', name: 'Баба Валя', sprite: 'granny', x: 1160, flip: true,
         when: () => isDay(),
-        async talk({ d }) {
-          if (F.rayMet) await d.say('Баба Валя', 'Марик, опять этот… в пятнистом у арки трётся. Держись от него подальше, слышишь? Он маме своей всю жизнь испортил.');
-          else await d.say('Баба Валя', 'Опять бегаешь? Сядь, отдохни. Все вы бегаете, а потом бац — и сорок лет.');
-        },
+        talk: grannyTalk,
       },
     ],
 
@@ -205,6 +274,24 @@ export const LOCATIONS = {
           fx.shake(300, 0.004);
           await wait(300);
           go('garage', 200);
+        },
+      },
+      {
+        x: 2300, label: 'Записка на «Мерсе»', sfx: 'paper',
+        when: () => isDay(),
+        async use({ d, fx }) {
+          fx.flash(2300, FLOOR - 60, 60, 24, 0xffffff, 0.6);
+          await d.think('Под дворником — записка маркером: «УЕХАЛ ЗА ЛИДАМИ. ВЕЧЕРОМ ТУТ. НЕ ТРОГАЙ МЕРС — ОН ЧУВСТВУЕТ. РЕЙ».');
+          if (!F.rayMet) await d.think('Какой ещё Рей? А, этот, в леопардовом. Про него Дэн говорил.');
+        },
+      },
+      {
+        x: 1700, y: 200, label: 'Кот на гараже', range: 50, sfx: 'meow',
+        async use({ d, line }) {
+          if (F.catPet) return d.think('Кот смотрит сверху вниз. Как критик.');
+          F.catPet = true;
+          await d.think('Чёрный кот на крыше гаража. Живёт тут дольше, чем мы с Дэном пишемся. Видел все наши провалы.');
+          line({ id: 'roof_cat', text: 'Кот на гараже видел все мои провалы', tag: 'street' });
         },
       },
       {
@@ -234,6 +321,7 @@ export const LOCATIONS = {
     steps: 'stepWood',
     night: () => (isNight() ? 0.38 : 0),
     draw: (s) => drawApartment(s, 1900),
+    lamps: () => (isNight() ? [{ x: 686, y: 352, r: 90, color: 0xffd27a }, ...(momHome() ? [{ x: 1150, y: 120, r: 170, color: 0xfff0c8, alpha: 0.35 }] : [])] : []),
     doors: [
       { id: 'd1', x: 775, w: 58, h: 206, auto: true, interior: true, inside: 0x4a4f66, insideFloor: 0x4a3a3a },
       { id: 'd2', x: 1375, w: 58, h: 206, auto: true, interior: true, inside: 0x34463f },
@@ -244,14 +332,28 @@ export const LOCATIONS = {
     async onEnter(ctx) {
       if (phase() === 'wed' && !F.wedWake) return wakeWednesday(ctx);
       if (phase() === 'thu' && !F.thuWake) return wakeThursday(ctx);
+      if (phase() === 'tue_night' && !F.tueNightHome) {
+        F.tueNightHome = true;
+        await ctx.d.think('Мама уже спит — ей в шесть вставать. Из-за её двери тихо бормочет радио.');
+        await ctx.d.say('', 'Shift + ← → — идти тихо. Так можно проскользнуть мимо тех, с кем не хочешь говорить.', '#ffd166');
+      }
+      if (phase() === 'wed_night' && !F.momNightIntro) {
+        F.momNightIntro = true;
+        await ctx.d.think('На кухне горит свет. Мама пришла со смены.');
+      }
     },
+
+    // Мама на кухне окликает сама — если не прокрасться мимо (Shift)
+    zones: [
+      { id: 'mom_kitchen', x1: 830, x2: 1330, sneak: true, when: () => momHome() && !F.momGreeted, run: momCallsOut },
+    ],
 
     npcs: [
       {
         id: 'mom', name: 'Мама', sprite: 'mom', x: 1150, flip: true,
-        when: () => phase() === 'wed_night' && !F.momAsked,
+        when: () => momHome(),
         label: 'Поговорить: Мама',
-        talk: momPath,
+        talk: momTalk,
       },
     ],
 
@@ -532,7 +634,7 @@ async function rayMeeting({ d, npc, walk, wait, fx, scene, sfx: play, line, goal
   d.close();
   await walk(ray, 2400, 120);
   ray.setFlipX(true);
-  goal('Иди домой спать. Утром — думать, где взять деньги');
+  goal(phase() === 'tue_night' ? 'Иди домой спать. Утром — думать, где взять деньги' : 'Деньги: Рей у арки — или мама на кухне');
 }
 
 // Злой Рей засирает всех, а потом распогоживается на случайном прохожем
@@ -560,6 +662,87 @@ async function rayRage({ d, scene, walk, wait, fx, sfx: play }) {
   await d.say('Рей', 'Всё, отпустило. Видишь, как работает? Заходи, если что.');
 }
 
+// ---------- Двор днём: пацан и баба Валя помнят вчерашнее ----------
+
+const KID_IDLE = voiced('Пацан', {
+  a: 'Я тебе мяч не дам. Ты его пнёшь, как тот, в леопардовом.',
+  b: 'А правда, что у рэперов всегда есть деньги? …А у тебя почему нет?',
+  c: 'Мой брат говорит, рэп — это для лохов. Мой брат лох.',
+});
+
+async function kidTalk({ d, sfx: play, line }) {
+  play('ball');
+  if (F.rayOffended && !F.kidRayTalk) {
+    F.kidRayTalk = true;
+    await d.say('Пацан', 'Тот, в леопардовом… он мой мяч в лужу пнул. Он больной?');
+    const c = await d.choose(['Больной. Держись от него подальше.', 'Не бери в голову.']);
+    if (c === 0) F.protectKid = true;
+    return d.say('Пацан', c === 0 ? 'Ладно… А ты его не боишься?' : 'Ага. Тебе легко говорить.');
+  }
+  const key = `kid_${phase()}`;
+  if (!F[key]) {
+    F[key] = true;
+    if (phase() === 'wed') {
+      if (F.kidTalked) {
+        await d.say('Пацан', 'Тень! Ты вчера обещал трек про двор! Я пацанам уже сказал, что ты про нас читать будешь.');
+        const c = await d.choose(['«Будет трек. Обещаю.»', '«Посмотрим.»']);
+        if (c === 0) {
+          F.kidPromise = true;
+          return d.say('Пацан', 'Йес! Я знал! Только про качели не забудь — они скрипят, как в фильме ужасов.');
+        }
+        return d.say('Пацан', '«Посмотрим» — так взрослые говорят, когда «нет».');
+      }
+      return d.say('Пацан', 'Тень! Ты в пятницу в «Подвале»? Нас не пустят, нам по двенадцать. Запиши потом, а?');
+    }
+    if (hasItem('mic')) {
+      await d.say('Пацан', 'Это микрофон?! Настоящий? Дай подержать! …Тяжёлый. Как у настоящих.');
+      line({ id: 'kid_mic', text: 'Пацан держит мой микрофон, как будто это кубок', tag: 'dream' });
+    } else {
+      await d.say('Пацан', 'Завтра же «Подвал»? Мы с пацанами под окнами будем стоять. Вдруг слышно.');
+    }
+    if (F.kidPromise) await d.say('Пацан', 'И про двор не забудь! Ты обещал.');
+    return;
+  }
+  const pool = Object.values(KID_IDLE);
+  await d.say('Пацан', pool[(F.kidIdle = ((F.kidIdle || 0) + 1)) % pool.length]);
+}
+
+const GRANNY_IDLE = voiced('Баба Валя', {
+  a: 'Иди-иди, артист. Шапку надень только.',
+  b: 'В наше время за такие штаны на комсомольском собрании разбирали. Ладно, иди.',
+  c: 'Я в восемьдесят седьмом во дворе с самим… ну, неважно с кем, танцевала. Иди.',
+});
+
+async function grannyTalk({ d, line }) {
+  const key = `granny_${phase()}`;
+  if (!F[key]) {
+    F[key] = true;
+    if (phase() === 'wed') {
+      if (F.grannyTalked) await d.say('Баба Валя', 'Марик! Шапку-то надел, как я вчера говорила? …Не надел. Весь в мать — упрямый.');
+      else await d.say('Баба Валя', 'Опять бегаешь? Сядь, отдохни. Все вы бегаете, а потом бац — и сорок лет.');
+      if (F.rayMet) {
+        F.grannySawRay = true;
+        await d.say('Баба Валя', 'Я в окно всё вижу, Марик. Ты ночью с этим… в пятнистом у арки стоял. Держись от него подальше. Он маме своей всю жизнь испортил.');
+        const c = await d.choose(['«Он просто знакомый.»', '«Не говорите маме, ладно?»']);
+        if (c === 1) {
+          await d.say('Баба Валя', 'Я-то не скажу. А глаза у матери свои есть.');
+        } else {
+          await d.say('Баба Валя', 'Знакомый… У меня тоже был знакомый. Сорок лет потом знакомилась с последствиями.');
+        }
+      }
+      return;
+    }
+    if (F.momLoan) await d.say('Баба Валя', 'Мать твоя ночью со смены шла, еле живая. Сапоги новые хотела, а теперь говорит — потом. Что ж ты, Марик…');
+    else if (F.momKnowsAcid) await d.say('Баба Валя', 'Что ж ты мать-то доводишь? Она утром на остановке стояла — глаза красные.');
+    else if (F.sleptOut && !F.warnedMom) await d.say('Баба Валя', 'Мать твоя ночью по двору бегала, тебя искала. Ты бы хоть звонил.');
+    else await d.say('Баба Валя', 'Завтра выступаешь? Я к телевизору сяду. …Ах, не по телевизору. Ну, ты всё равно спой хорошо.');
+    line({ id: 'granny_window', text: 'Баба Валя видит всё — даже то, чего я сам не вижу', tag: 'street' });
+    return;
+  }
+  const pool = Object.values(GRANNY_IDLE);
+  await d.say('Баба Валя', pool[(F.grannyIdle = ((F.grannyIdle || 0) + 1)) % pool.length]);
+}
+
 // ---------- Сон и утро ----------
 
 async function sleep({ d, card, go }) {
@@ -567,8 +750,8 @@ async function sleep({ d, card, go }) {
   if (p === 'tue_night') {
     await d.think('Ложусь. Потолок. Пятнадцать тысяч. Потолок. Рей. Потолок.');
     d.close();
+    endAcid();
     setPhase('wed');
-    F.acidNow = false;
     saveGame({ loc: 'apartment', spawnX: 200 });
     await card('СРЕДА', 'до «Подвала» — два дня');
     return go('apartment', 200);
@@ -582,8 +765,8 @@ async function sleep({ d, card, go }) {
     }
     await d.think('Засыпаю под гул холодильника. Снится, что я на сцене, а микрофон — это банан.');
     d.close();
+    endAcid();
     setPhase('thu');
-    F.acidNow = false;
     await card('ЧЕТВЕРГ', 'до «Подвала» — один день');
     return go('apartment', 200);
   }
@@ -614,10 +797,13 @@ async function wakeWednesday(ctx) {
 async function wakeThursday({ d }) {
   F.thuWake = true;
   await d.think('Четверг. Завтра — «Подвал».');
-  if (hasItem('mic')) return d.think('Микрофон уже есть. Надо отнести его Дэну.');
-  if (state.cash >= 2000) await d.think(`Денег — ${state.cash.toLocaleString('ru-RU')} ₽. Пора на барахолку у станции.`);
+  if (hasItem('mic')) return d.think('Микрофон уже есть. Вечером — к Дэну на репетицию.');
+  if (state.cash >= 2000) await d.think('Деньги есть. Пора на барахолку у станции — она до восьми.');
   else await d.think('Денег всё ещё почти нет. Плохо. Очень плохо.');
+  if (F.momKnowsAcid) await d.think('На холодильнике записка, мамин почерк сильнее обычного вдавлен в бумагу: «Нам надо поговорить».');
 }
+
+setLyubaCall((ctx) => callLyuba(ctx));
 
 async function callLyuba({ d, goal, sfx: play }) {
   play('phone');
@@ -672,10 +858,114 @@ async function pawnWatch({ d, cash, goal, sfx: play, fx }) {
   }
 }
 
+// ---------- Мама живая: окликает сама, палит марочку ----------
+
+// Настроение мамы: устала после смены, плюс отношение, плюс то, что она знает
+function momMood() {
+  let m = -1 + (state.rel.mom >= 2 ? 1 : state.rel.mom <= -1 ? -1 : 0);
+  if (F.momWorried) m -= 1;
+  if (F.grannySawRay) m -= 1;
+  if (F.toldMomWhere) m += 1;
+  return Phaser.Math.Clamp(m, -2, 2);
+}
+
+const MOM_OPENER = voiced('Мама', {
+  warm: 'Ой, ты не спишь? Иди сюда. Я пирожков из столовой принесла, ещё тёплые.',
+  ok: 'Марк? Ты чего не спишь? Есть будешь? Там гречка.',
+  tired: 'Опять до ночи где-то был? Я с ног валюсь, а ты…',
+  cold: 'Садись. Мне баба Валя кое-что рассказала.',
+});
+
+async function momCallsOut(ctx) {
+  const { d, npc, scene } = ctx;
+  F.momGreeted = true;
+  const mom = npc('mom');
+  mom?.setFlipX(scene.player.x < mom.x);
+  if (F.acidNow) return momSeesAcid(ctx);
+  const mood = momMood();
+  await d.say('Мама', mood >= 1 ? MOM_OPENER.warm : mood === 0 ? MOM_OPENER.ok : mood === -1 ? MOM_OPENER.tired : MOM_OPENER.cold);
+  const opts = [];
+  if (!F.momAsked) opts.push(['money', '«Мам, мне нужно поговорить. Про деньги.»']);
+  opts.push(['night', '«Всё нормально. Спокойной ночи.»']);
+  opts.push(['pass', '[Молча пройти мимо]']);
+  const c = await d.choose(opts.map((o) => o[1]));
+  const pick = opts[c][0];
+  if (pick === 'money') return momPath(ctx);
+  if (pick === 'night') {
+    await d.say('Мама', 'Спокойной… Ты поешь только. И не сиди до утра.');
+    return;
+  }
+  state.rel.mom -= 1;
+  await d.say('Мама', 'Даже не поздороваешься? …Ну и ладно.');
+}
+
+async function momTalk(ctx) {
+  const { d } = ctx;
+  F.momGreeted = true;
+  if (F.acidNow && !F.momSawAcid) return momSeesAcid(ctx);
+  if (!F.momAsked) return momPath(ctx);
+  if (F.momKnowsAcid) return d.say('Мама', 'Иди спать, Марк. Я не могу сейчас. Утром.');
+  if (F.momLoan) return d.say('Мама', 'Иди спать, артист. Мне вставать через пять часов.');
+  await d.say('Мама', 'Ты всё ещё тут? Иди спи. Утро вечера мудренее.');
+}
+
+// Марк под марочкой, а мама — нет
+async function momSeesAcid(ctx) {
+  const { d, fx } = ctx;
+  F.momSawAcid = true;
+  // Почти всегда палит: она этого насмотрелась
+  const chance = 0.8 + (state.rel.mom >= 1 ? 0.1 : 0) + (momMood() <= -1 ? 0.05 : 0);
+  await d.say('Мама', 'Марк? Подойди-ка.');
+  if (Math.random() > chance) {
+    await d.say('Мама', 'Ты какой-то бледный. Поешь и спать. Слышишь?');
+    return;
+  }
+  F.momKnowsAcid = true;
+  fx.shake(150, 0.004);
+  await d.say('Мама', 'Посмотри на меня. Посмотри, говорю.');
+  await d.say('Мама', 'Ты чё, упоролся? Зрачки! У тебя зрачки во всё лицо!');
+  const c = await d.choose(['«Мам, я просто устал.»', '«Да. Рей дал. Один раз.»', '[Уйти в комнату]'], { timer: 8, timeoutIndex: 2 });
+  if (c === 0) {
+    state.pulse -= 2;
+    if (state.rel.mom >= 2 && Math.random() < 0.4) {
+      F.momKnowsAcid = false;
+      F.liedMom = true;
+      await d.say('Мама', 'Устал он… Ладно. Иди ложись. Я тебе чай принесу.');
+      await d.think('Она поверила. От этого почему-то ещё хуже.');
+      return;
+    }
+    state.rel.mom -= 1;
+    F.liedMom = true;
+    F.momNoMoney = true;
+    await d.say('Мама', 'Не ври мне. Я твоего отца двадцать лет таким видела. Таким же «уставшим».');
+    await d.say('Мама', 'Иди. Видеть тебя сейчас не могу.');
+  } else if (c === 1) {
+    state.stats.honesty += 1;
+    state.pulse += 1;
+    F.momKnowsRay = true;
+    F.momNoMoney = true;
+    await d.say('Мама', 'Рей?! …Господи. Его мать до сих пор по ночам плачет. Ты хочешь, чтобы и я?');
+    await d.think('Она садится обратно на табуретку и закрывает лицо руками. Потом встаёт и обнимает меня. Крепко, как в детстве.');
+    await d.say('Мама', 'Ещё раз — и я не знаю, что сделаю. Иди спать. Утром поговорим.');
+    ctx.line({ id: 'mom_pupils', text: 'Мама смотрит в мои зрачки и видит отца', tag: 'pain' });
+  } else {
+    state.rel.mom -= 1;
+    state.pulse -= 1;
+    F.momNoMoney = true;
+    await d.say('Мама', 'Марк! Марк, вернись! …Ну и иди.');
+    await d.think('Закрываю дверь. Слышу, как она звонит кому-то и говорит шёпотом.');
+  }
+}
+
 // ---------- Путь Б: мама ----------
 
 async function momPath({ d, cash, line, goal, sfx: play, fx, wait }) {
   F.momAsked = true;
+  if (F.momNoMoney) {
+    await d.say('Марк', 'Мам… мне нужны деньги. На микрофон.');
+    await d.say('Мама', 'Деньги? Сейчас? Чтобы ты их этому Рею отнёс? Нет, Марк. Не сегодня.');
+    return;
+  }
   await d.think('Мама сидит на кухне в пальто. Не раздевается — нет сил. Двадцать три сорок.');
   if (F.momTalk === 'promise') {
     await d.say('Мама', 'Ты чего не спишь? …Ты же обещал всё изменить, Марк. Вот и меняй.');
@@ -693,8 +983,8 @@ async function momPath({ d, cash, line, goal, sfx: play, fx, wait }) {
   } else {
     await d.say('Мама', 'Ну? Говори. Ты же не просто так не спишь.');
   }
-  if (F.rayFriend) {
-    await d.say('Мама', 'Мне Галина из столовой сказала, тебя с этим… в леопардовом видели.');
+  if (F.rayFriend || F.grannySawRay) {
+    await d.say('Мама', 'Мне баба Валя сказала, тебя с этим… в леопардовом у арки видели.');
     await d.say('Мама', 'Марк. Только не он. Его мать до сих пор по ночам плачет.');
   }
   await d.say('Марк', 'Пятнадцать тысяч. На микрофон. В пятницу выступление.');
@@ -858,17 +1148,18 @@ async function buyMic({ d, cash, item, goal, fx, sfx: play }) {
   F.micType = mic.id;
   item('mic');
   fx.burst(1000, 360, { color: 0x3df0ff, count: 16, tex: 'spark', speed: 180 });
-  const lines = {
-    stolen: 'Этот… ты не спрашивай, откуда он. Он сам пришёл. Ночью. Без коробки.',
-    rey: 'Это Рея. Он его мне за долги сдал. Говорил, микрофон «лидогенерирует». Я не понял. Ты понял?',
-    oktava: '«Октава»! Наша, тульская. Тёплая, как бабушкины руки. Иногда шипит — это она дышит.',
-    shure: '«Шур». Надёжный, как налоговая. Звучит как у всех. Зато звучит.',
-    new: 'В коробке! С плёнкой! Последний такой. Пахнет как будущее. Я его сам чуть не оставил себе.',
-  };
-  await d.say('Гоша', lines[mic.id]);
+  await d.say('Гоша', GOSHA_MIC[mic.id]);
   if (mic.id === 'stolen') F.stolenMic = true;
-  goal('Отнести микрофон Дэну в гараж №17');
+  goal(phase() === 'thu_eve' ? 'Отнести микрофон Дэну в гараж №17 — репетиция' : 'Репетиция у Дэна — в четверг вечером');
 }
+
+const GOSHA_MIC = voiced('Гоша', {
+  stolen: 'Этот… ты не спрашивай, откуда он. Он сам пришёл. Ночью. Без коробки.',
+  rey: 'Это Рея. Он его мне за долги сдал. Говорил, микрофон «лидогенерирует». Я не понял. Ты понял?',
+  oktava: '«Октава»! Наша, тульская. Тёплая, как бабушкины руки. Иногда шипит — это она дышит.',
+  shure: '«Шур». Надёжный, как налоговая. Звучит как у всех. Зато звучит.',
+  new: 'В коробке! С плёнкой! Последний такой. Пахнет как будущее. Я его сам чуть не оставил себе.',
+});
 
 // ---------- Путь В: Рей у арки ----------
 
@@ -951,7 +1242,8 @@ async function rayDeal(ctx) {
       cash(15000);
       scene.bookCount?.setText(String(state.lines.length));
       fx.flash(scene.player.x, FLOOR - 80, 200, 200, 0xff3d8a, 0.6, 600);
-      await d.say('Рей', `«${sold[0].text}»… (смакует) Это теперь моё, братик. Лидогенерация чужого таланта — самая честная.`);
+      await d.think(`Рей перечитывает вслух: «${sold[0].text}». Смакует каждое слово.`);
+      await d.say('Рей', 'Это теперь моё, братик. Лидогенерация чужого таланта — самая честная.');
       await d.think('Три строчки исчезли из тетради. Будто вырвал страницу из себя.');
     } else {
       state.stats.honesty += 1;
@@ -969,9 +1261,7 @@ async function rayDeal(ctx) {
     await d.say('Рей', 'Я так «ЛИДОГЕН» писал. Двенадцать часов писал. Или три. Или я его не писал… неважно.');
     const c3 = await d.choose(['[Взять]', '«Не, я так.»', '[Взять на потом]']);
     if (c3 === 0) {
-      F.triedLSD = true;
-      F.acidNow = true;
-      state.stats.addiction += 1;
+      startAcid();
       d.close();
       fx.screenFlash(0xff7ab8, 500);
       acid(true);
@@ -992,14 +1282,92 @@ async function rayDeal(ctx) {
 
 // ---------- Четверг: финал в гараже ----------
 
-const MIC_REACTION = {
+const MIC_REACTION = voiced('Дэн', {
   new: 'Новый?! В коробке?! Брат, ты банк ограбил?',
   oktava: '«Октава»! Старая школа. Тёплая. Будет шипеть — значит, живая.',
   shure: '«Шур». Как у всех. Но работает — это главное.',
   stolen: '…Тут серийник сточен. Ты где его взял? Ладно. Не говори. Не хочу знать.',
   rey: 'Это… мик Рея? С наклейкой «ЛИДОГЕН»? Ты серьёзно? Он в него плевал. Буквально.',
   toy: 'Розовый. Со стразами. Поёт голосом феи. Но это микрофон, и он работает.',
-};
+});
+
+// Микрофон принесли раньше четверга вечера: Дэн радуется, но репетиция всё равно вечером
+async function micEarly(ctx) {
+  const { d, goal, npc, fx, sfx: play } = ctx;
+  F.danSawMic = true;
+  const dan = npc('dan');
+  dan.setFlipX(true);
+  play('feedback');
+  fx.burst(dan.x - 40, FLOOR - 120, { color: 0x3df0ff, count: 12, tex: 'spark', speed: 140 });
+  await d.say('Марк', 'Смотри, что есть.');
+  await d.say('Дэн', MIC_REACTION[F.micType] || MIC_REACTION.shure);
+  if (phase() === 'thu') return waitForEvening(ctx, true);
+  await d.say('Дэн', 'Репетируем завтра вечером. Сегодня бит недосведённый, а у тебя голос — как будто ты фуру разгрузил.');
+  await d.say('Дэн', 'Иди отдыхай. Или ищи строчки. Строчки лишними не бывают.');
+  goal('Репетиция у Дэна — в четверг вечером');
+}
+
+async function waitForEvening(ctx, fresh = false) {
+  const { d, card, go } = ctx;
+  if (!fresh) await d.say('Дэн', 'Вечером, брат. Я бит досвожу — к вечеру будет как надо.');
+  else await d.say('Дэн', 'Слушай, давай вечером. Я бит досвожу, а ты пока распоёшься.');
+  const c = await d.choose(['Подождать здесь до вечера', 'Ещё погуляю']);
+  if (c === 1) return ctx.goal('Репетиция у Дэна — вечером');
+  await d.think('Сижу на диване. Дэн крутит ручки, бормочет «низы, низы». За воротами темнеет.');
+  d.close();
+  setPhase('thu_eve');
+  await card('ЧЕТВЕРГ · ВЕЧЕР', 'гараж №17');
+  go('garage', 640);
+}
+
+// Ночёвка на диване у Дэна: мама будет волноваться, если не предупредить
+async function sleepInGarage(ctx) {
+  const { d, card, go } = ctx;
+  const c = await d.choose(['Остаться на ночь у Дэна', 'Нет, пойду домой']);
+  if (c === 1) return;
+  {
+    await d.think('Надо бы маме написать, что я у Дэна. Или не надо?');
+    receive('mom', 'Марк, ты где? Уже ночь', {
+      replies: [{ id: 'e1_night_dan', text: 'Я у Дэна, всё ок. Утром буду' }, { id: 'e1_night_lie', text: 'У друга. Не жди' }],
+    });
+    await d.say('', 'Мама пишет. Ответить можно в телефоне — клавиша P. Или не отвечать.', '#ffd166');
+  }
+  await d.say('Дэн', 'Плед в шкафу. Если ночью замёрзнешь — бабушкин ковёр снимай. Шучу. Не трогай ковёр.');
+  d.close();
+  F.sleptOut = (F.sleptOut || 0) + 1;
+  endAcid();
+  const next = phase() === 'tue_night' ? 'wed' : 'thu';
+  setPhase(next);
+  F.garageWake = next;
+  await card(next === 'wed' ? 'СРЕДА' : 'ЧЕТВЕРГ', 'диван в гараже №17');
+  go('garage', 300);
+}
+
+async function garageMorning(ctx) {
+  const { d } = ctx;
+  F.garageWake = null;
+  await d.think('Просыпаюсь на диване. Пахнет бабушкиным ковром и остывшим паяльником.');
+  await d.say('Дэн', 'Доброе. Ты храпишь, как фура Палыча. Чай будешь? Он без сахара. И без чая.');
+  if (!F.warnedMom) {
+    state.rel.mom -= 1;
+    F.momWorried = true;
+    await d.think('В телефоне — четыре пропущенных от мамы. Она не спала.');
+    receive('mom', 'Марк!!! Ты где?! Я всю ночь не спала. Позвони немедленно');
+  } else if (F.liedMomNight) {
+    await d.think('Мама написала: «Позавтракай нормально». Сухо. Она поняла, что я соврал.');
+  } else {
+    await d.think('Мама написала: «Позавтракай нормально». Значит, не сердится. Почти.');
+  }
+  if (phase() === 'wed') {
+    F.wedWake = true;
+    await d.think('Среда. До «Подвала» два дня. Пятнадцать тысяч не появятся сами.');
+    await d.think('Склад тёти Любы, мама вечером, Рей у арки… и ящик стола дома.');
+  } else {
+    F.thuWake = true;
+    await d.think('Четверг. Завтра — «Подвал».');
+    if (hasItem('mic')) await d.think('Микрофон есть. Вечером — репетиция. Прямо здесь.');
+  }
+}
 
 async function toyMic(ctx) {
   const { d, item } = ctx;
@@ -1017,14 +1385,19 @@ async function finale(ctx, skipCard = false) {
   if (!skipCard) await card('ЧЕТВЕРГ · НОЧЬ', 'гараж №17');
   setPhase('final');
   ctx.hud();
-  if (F.triedLSD) acid(true);
+  acid(!!F.acidNow);
   const dan = npc('dan');
   dan.setFlipX(true);
   scene.player.x = 780;
   scene.player.setFlipX(false);
   await wait(300);
-  await d.think('Новый микрофон на стойке. Дэн бережно снимает плёнку, как с иконы.');
-  await d.say('Дэн', MIC_REACTION[F.micType] || MIC_REACTION.shure);
+  if (F.danSawMic) {
+    await d.think('Микрофон на стойке. Дэн протирает его рукавом, как трофей.');
+  } else {
+    F.danSawMic = true;
+    await d.think('Новый микрофон на стойке. Дэн бережно снимает плёнку, как с иконы.');
+    await d.say('Дэн', MIC_REACTION[F.micType] || MIC_REACTION.shure);
+  }
 
   // Как добыли деньги — Дэн всё равно узнает
   if (F.shifts) {
@@ -1051,25 +1424,32 @@ async function finale(ctx, skipCard = false) {
   if (F.reyGhost) {
     state.rel.dan -= 2;
     F.danHurt = true;
-    await d.say('Дэн', 'Погоди. Где «' + state.soldLines[0].text + '»? Её нет в тетради.');
+    await d.say('Дэн', 'Погоди. Тут страницы не хватает. Где наши строчки? Их нет в тетради.');
     await d.say('Дэн', 'Ты продал… наши строчки? Рею? Брат, это не микрофон. Это ты сам себя продал.');
   }
   if (F.soldWatch) await d.say('Дэн', 'Ты продал… часы? Отцовские? Марк…');
-  if (F.triedLSD) await d.say('Дэн', 'Ты чего такой… стеклянный? Глаза как блюдца. Ты у Рея был?');
+  // Дэн замечает марочку, только если она действует прямо сейчас
+  if (F.acidNow) await d.say('Дэн', 'Ты чего такой… стеклянный? Глаза как блюдца. Ты у Рея был?');
+  else if (acidYesterday()) await d.say('Дэн', 'Ты вчера у Рея был? Выглядишь как после стирки. Ладно, не моё дело. Пока.');
 
   await d.say('Дэн', 'Ну что, проверим? Зачитай новое. Я пишу.');
   d.close();
-  start('Studio', { mode: 'rehearsal', acid: !!F.triedLSD });
+  start('Studio', { mode: 'rehearsal', acid: !!F.acidNow });
 }
+
+const REHEARSAL_VERDICT = voiced('Дэн', {
+  toy: 'Звучит… как фея с района. Но звучит.',
+  normal: 'Звучит. Чёрт, как звучит.',
+});
 
 async function afterRehearsal({ d, acid, goal, npc, scene, wait }) {
   F.e1FinaleTalk = true;
   const dan = npc('dan');
   dan.setFlipX(true);
   scene.player.setFlipX(false);
-  if (F.triedLSD) acid(true);
+  acid(!!F.acidNow);
   await wait(300);
-  await d.say('Дэн', F.micType === 'toy' ? 'Звучит… как фея с района. Но звучит.' : 'Звучит. Чёрт, как звучит.');
+  await d.say('Дэн', F.micType === 'toy' ? REHEARSAL_VERDICT.toy : REHEARSAL_VERDICT.normal);
   await d.say('Дэн', 'Завтра в восемь. «Подвал». Не опаздывай.');
   const c = await d.choose(['«Я никогда не опаздываю.»', '«Если облажаюсь — ты меня вытащишь?»', '[Молча обнять]']);
   if (c === 1) {
@@ -1080,10 +1460,6 @@ async function afterRehearsal({ d, acid, goal, npc, scene, wait }) {
     await d.say('Дэн', '…Ну всё, всё. Иди. А то я сейчас расплачусь, и это будет не контент.');
   } else {
     await d.say('Дэн', 'Ага. В прошлый раз ты на сорок минут опоздал. На свой день рождения.');
-  }
-  if (F.triedLSD) {
-    acid(false);
-    F.acidNow = false;
   }
   goal('Иди домой. Завтра — «Подвал»');
 }

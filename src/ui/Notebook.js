@@ -1,5 +1,9 @@
 import { state, TAGS, ITEMS } from '../state.js';
 import { sfx } from '../audio.js';
+import { uiContainer } from './pin.js';
+
+// Вещи, которые можно использовать прямо из тетради
+export const USABLE = { marka: 'съесть' };
 
 // Тетрадь Марка: цель, собранные строчки, вещи в карманах.
 // pick(n) — режим выбора строчек (например, чтобы продать их Рею).
@@ -7,7 +11,9 @@ export class Notebook {
   constructor(scene) {
     this.scene = scene;
     this.open = false;
-    this.root = scene.add.container(0, 0).setScrollFactor(0).setDepth(1100).setVisible(false);
+    this.root = uiContainer(scene, 0, 0, 1100).setVisible(false);
+    // Сцена передаёт сюда, что делать с вещью (например, марочка «на потом»)
+    this.onUse = null;
   }
 
   page(title) {
@@ -25,7 +31,8 @@ export class Notebook {
 
   lineRow(l, i, y, extra = {}) {
     const s = this.scene;
-    const t = s.add.text(214, y - 2, `${extra.num ? `${i + 1}. ` : ''}«${l.text}»`, {
+    const key = i < 9 ? i + 1 : ['0', '-', '='][i - 9];
+    const t = s.add.text(214, y - 2, `${extra.num ? `${key}. ` : ''}«${l.text}»`, {
       fontFamily: '"PT Mono", monospace', fontSize: '17px', color: '#1e1a2e', fontStyle: 'italic',
     });
     const tag = s.add.text(812, y, TAGS[l.tag].name, {
@@ -55,12 +62,42 @@ export class Notebook {
       this.root.add(s.add.text(812, 92, `ещё ${state.lines.length - max} выше`, { fontFamily: '"PT Mono", monospace', fontSize: '13px', color: '#7a7090' }).setOrigin(1, 0));
     }
     if (state.inventory.length) {
-      const inv = state.inventory.map((id) => ITEMS[id] || id).join(' · ');
-      this.root.add(s.add.text(214, 440, `В карманах: ${inv}`, { fontFamily: '"PT Mono", monospace', fontSize: '15px', color: '#2a2238', wordWrap: { width: 590 } }));
+      this.root.add(s.add.text(214, 436, 'В карманах:', { fontFamily: '"PT Mono", monospace', fontSize: '15px', color: '#2a2238' }));
+      let x = 330;
+      let row = 0;
+      this.usable = [];
+      state.inventory.forEach((id) => {
+        const use = USABLE[id] && this.onUse;
+        const n = use ? this.usable.push(id) : 0;
+        const label = `${ITEMS[id] || id}${use ? ` [${n}: ${USABLE[id]}]` : ''}`;
+        const t = s.add.text(x, 436 + row * 22, label, {
+          fontFamily: '"PT Mono", monospace', fontSize: '15px', color: use ? '#c03a5a' : '#2a2238', fontStyle: use ? 'bold' : 'normal',
+        });
+        if (x + t.width > 810) {
+          row++;
+          x = 330;
+          t.setPosition(x, 436 + row * 22);
+        }
+        x += t.width + 18;
+        if (use) t.setInteractive({ useHandCursor: true }).on('pointerdown', () => this.use(id));
+        this.root.add(t);
+      });
     }
     this.root.add(s.add.text(480, 488, '[Q] закрыть', { fontFamily: '"PT Mono", monospace', fontSize: '15px', color: '#5a5070' }).setOrigin(0.5));
     this.root.setVisible(true);
     this.open = true;
+  }
+
+  // Клавиши 1–9 в обычной тетради — использовать вещь
+  handleKey(ev) {
+    const n = parseInt(ev.key, 10);
+    if (n >= 1 && this.usable?.[n - 1]) this.use(this.usable[n - 1]);
+  }
+
+  use(id) {
+    const cb = this.onUse;
+    this.hide();
+    cb?.(id);
   }
 
   // Выбрать n строчек. Возвращает Promise с массивом выбранных.
@@ -68,8 +105,9 @@ export class Notebook {
     const s = this.scene;
     this.page(title);
     const chosen = new Set();
-    const lines = state.lines.slice(0, 12);
-    const hint = s.add.text(480, 86, `Отметь ${n}`, { fontFamily: '"PT Mono", monospace', fontSize: '16px', color: '#c03a5a' }).setOrigin(0.5);
+    // Цифры 1–9, 0 — десятая, «-» и «=» — одиннадцатая и двенадцатая
+    const lines = state.lines.slice(-12);
+    const hint = s.add.text(480, 86, `Отметь ${n} — кликни по строчке или нажми её номер`, { fontFamily: '"PT Mono", monospace', fontSize: '16px', color: '#c03a5a' }).setOrigin(0.5);
     this.root.add(hint);
     const rows = lines.map((l, i) => {
       const t = this.lineRow(l, i, 112 + i * 30, { num: true });
@@ -82,15 +120,18 @@ export class Notebook {
       else return sfx('deny');
       sfx('select');
       rows.forEach((r, j) => r.setColor(chosen.has(j) ? '#c03a5a' : '#1e1a2e').setFontStyle(chosen.has(j) ? 'bold italic' : 'italic'));
-      hint.setText(chosen.size < n ? `Отметь ещё ${n - chosen.size}` : 'Готово — Enter');
+      hint.setText(chosen.size < n ? `Отметь ещё ${n - chosen.size}` : 'Готово — жми «Готово» или Enter');
+      ok.setAlpha(chosen.size === n ? 1 : 0.4);
     };
+    const ok = s.add.text(480, 488, '[ ГОТОВО ]', { fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#2a2238' }).setOrigin(0.5).setAlpha(0.4);
+    this.root.add(ok);
     this.root.setVisible(true);
     this.open = true;
     this.picking = true;
     return new Promise((resolve) => {
       const onKey = (ev) => {
-        const k = parseInt(ev.key, 10);
-        if (k >= 1 && k <= Math.min(9, lines.length)) toggle(k - 1);
+        const k = { 0: 10, '-': 11, '=': 12 }[ev.key] ?? parseInt(ev.key, 10);
+        if (k >= 1 && k <= lines.length) toggle(k - 1);
         if (ev.key === 'Enter' && chosen.size === n) {
           s.input.keyboard.off('keydown', onKey);
           this.picking = false;
@@ -99,9 +140,10 @@ export class Notebook {
         }
       };
       s.input.keyboard.on('keydown', onKey);
-      const ok = s.add.text(480, 488, '[ ГОТОВО ]', { fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#2a2238' }).setOrigin(0.5);
-      ok.setInteractive({ useHandCursor: true }).on('pointerdown', () => onKey({ key: 'Enter' }));
-      this.root.add(ok);
+      ok.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        if (chosen.size === n) onKey({ key: 'Enter' });
+        else sfx('deny');
+      });
     });
   }
 

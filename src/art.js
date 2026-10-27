@@ -374,6 +374,22 @@ export function createArt(scene) {
   g.generateTexture('box_fragile', 44, 36);
   g.destroy();
 
+  // Мягкое пятно света для фонарей, окон и кислотного режима
+  const glow = scene.textures.createCanvas('glow', 128, 128);
+  const gc = glow.getContext();
+  const grad = gc.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.45)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  gc.fillStyle = grad;
+  gc.fillRect(0, 0, 128, 128);
+  glow.refresh();
+
+  // Голубь и кот
+  paint(scene, 'pigeon_0', ['..GG...', '.GGeG..', 'GGGGGGw', '.GGGGG.', '..o.o..'], { G: '#7a7a8a', e: '#141418', w: '#c8c8d0', o: '#c86a4a' }, 4);
+  paint(scene, 'cat_0', ['K...K...', 'KK.KK...', 'KyKyK...', 'KKKKK..K', '.KKKKK.K', '.KKKKKKK', '.KKKKKK.', '.K.K.K..'], { K: '#1a1420', y: '#d8e040' }, 5);
+  paint(scene, 'cat_1', ['K...K...', 'KK.KK...', 'KyKyK..K', 'KKKKK..K', '.KKKKKK.', '.KKKKKK.', '.KKKKKK.', '.K.K.K..'], { K: '#1a1420', y: '#d8e040' }, 5);
+
   paint(scene, 'bird_0', ['B.....B', '.B...B.', '..BBB..'], { B: '#1a1426' }, 3);
   paint(scene, 'bird_1', ['.......', 'BBBBBBB', '...B...'], { B: '#1a1426' }, 3);
   scene.anims.create({ key: 'bird_fly', frames: [{ key: 'bird_0' }, { key: 'bird_1' }], frameRate: 8, repeat: -1 });

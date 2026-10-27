@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { listDemos, playDemo } from '../demos.js';
 import { sfx, audioCtx } from '../audio.js';
 import { TAGS } from '../state.js';
+import { uiContainer } from './pin.js';
 
 const X = 150;
 const Y = 50;
@@ -13,7 +14,7 @@ export class DemoPC {
   constructor(scene) {
     this.scene = scene;
     this.open = false;
-    this.root = scene.add.container(0, 0).setScrollFactor(0).setDepth(1100).setVisible(false);
+    this.root = uiContainer(scene, 0, 0, 1100).setVisible(false);
     this.demos = [];
     this.sel = 0;
     this.playing = null;
@@ -34,7 +35,7 @@ export class DemoPC {
     const title = s.add.text(X + 12, Y + 8, 'DAN_PC  ▸  C:\\ДЕМКИ', { fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#061420' });
     const close = s.add.text(X + W - 12, Y + 8, '[X]', { fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#061420' }).setOrigin(1, 0)
       .setInteractive({ useHandCursor: true }).on('pointerdown', () => this.hide());
-    this.hint = s.add.text(X + W / 2, Y + H - 22, '↑↓ выбрать   ENTER слушать / стоп   ESC выйти', {
+    this.hint = s.add.text(X + W / 2, Y + H - 22, 'клик или ↑↓ + ENTER — слушать / стоп   ESC — выйти', {
       fontFamily: '"PT Mono", monospace', fontSize: '15px', color: '#4a8aa0',
     }).setOrigin(0.5);
     // Строки развёртки старого монитора
@@ -127,7 +128,7 @@ export class DemoPC {
         if (!this.playing) return;
         const t = audioCtx().currentTime - this.playing.h.startAt;
         const k = Phaser.Math.Clamp(t / d.length, 0, 1);
-        this.prog.width = (W - 60) * k;
+        this.prog.setSize(Math.max(1, (W - 60) * k), 6);
         const cur = (d.items || []).find((it) => t >= it.start && t < it.end);
         this.lyric.setText(cur ? cur.text : t < (d.items?.[0]?.start ?? 0) ? '· · ·' : '');
         if (cur) this.lyric.setShadow(0, 0, TAGS[cur.tag]?.color || '#ff3d8a', 14, true, true);

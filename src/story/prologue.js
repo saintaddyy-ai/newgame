@@ -116,7 +116,7 @@ export const LOCATIONS = {
       F.wokeUp = true;
       await d.think('Шесть сорок. Будильник не нужен — за стенкой мама гремит кастрюлями.');
       await d.think('Опять собирается на две смены.');
-      await d.say('', '← → или A / D — ходить.   E — осмотреть / поговорить.   Q — тетрадь со строчками.', '#ffd166');
+      await d.say('', '← → или A / D — ходить.   E — осмотреть / поговорить.   Q — тетрадь.   P — телефон.', '#ffd166');
     },
 
     npcs: [
@@ -279,6 +279,17 @@ export const LOCATIONS = {
     ambience: 'rain',
     steps: 'stepWet',
     draw: (s) => drawYard(s, 2200),
+    lamps: [
+      { x: 155, y: 238, r: 110, color: 0xfff0b0, cone: true },
+      { x: 506, y: 210, r: 120, color: 0xffe0a0, cone: true, flicker: true },
+      { x: 1346, y: 210, r: 120, color: 0xffe0a0, cone: true },
+      { x: 2017, y: 440, r: 110, color: 0xffd27a },
+    ],
+    critters: [{ type: 'pigeons', x: 560, n: 5 }, { type: 'cat', x: 1700, y: 244, depth: 4 }],
+    photoSpots: [
+      { id: 'p_graffiti', x: 1400, line: { id: 'photo_tag', text: 'Сфоткал своё имя на стене, чтобы не забыть, что оно моё', tag: 'street' } },
+      { id: 'p_swings', x: 760, text: 'Качели под дождём. Скрипят, как старая пластинка.' },
+    ],
     doors: [{ id: 'entrance', x: 155, w: 126, h: 208, color: 0x3a4658, metal: false }],
 
     async onEnter({ d, door, wait }) {
@@ -381,6 +392,7 @@ export const LOCATIONS = {
     ambience: 'garage',
     steps: 'stepConcrete',
     draw: (s) => drawGarage(s, 1100),
+    lamps: [{ x: 720, y: 72, r: 150, color: 0xffe8a8, alpha: 0.4 }, { x: 730, y: 371, r: 50, color: 0x3df0ff, alpha: 0.35 }],
     doors: [{ id: 'gate', x: 69, w: 122, h: 228, metal: true, color: 0x4a505c }],
 
     async onEnter(ctx) {

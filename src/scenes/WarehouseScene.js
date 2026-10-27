@@ -16,8 +16,10 @@ export class WarehouseScene extends Phaser.Scene {
     super('Warehouse');
   }
 
-  create({ shift = 1 }) {
+  create({ shift = 1, pay = BASE_PAY, back = 'warehouse' }) {
     this.total = shift === 1 ? 24 : 20;
+    this.basePay = pay;
+    this.backLoc = back;
     this.hits = 0;
     this.misses = 0;
     this.done = false;
@@ -42,6 +44,8 @@ export class WarehouseScene extends Phaser.Scene {
 
     this.add.text(480, 40, 'РАЗГРУЗКА', { fontFamily: '"Press Start 2P"', fontSize: '22px', color: '#ffffff', stroke: '#ff8a20', strokeThickness: 6 }).setOrigin(0.5);
     this.scoreText = this.add.text(480, 84, '', { fontFamily: '"PT Mono", monospace', fontSize: '20px', color: '#c9c4ee' }).setOrigin(0.5);
+    // Сколько получишь на руки — видно сразу и меняется с каждой разбитой коробкой
+    this.payText = this.add.text(480, 116, '', { fontFamily: '"Press Start 2P"', fontSize: '14px', color: '#8ae6a0' }).setOrigin(0.5);
     this.hint = this.add.text(480, 500, 'ПРОБЕЛ / E / тап — поймать коробку в жёлтой зоне', { fontFamily: '"PT Mono", monospace', fontSize: '16px', color: '#8a8aa0' }).setOrigin(0.5);
     this.updateScore();
 
@@ -120,6 +124,12 @@ export class WarehouseScene extends Phaser.Scene {
 
   updateScore() {
     this.scoreText.setText(`Поймано: ${this.hits} / ${this.total}   ·   Разбито: ${this.misses}   ·   Штраф: −${this.misses * FINE} ₽`);
+    const pay = Math.max(0, this.basePay - this.misses * FINE);
+    this.payText.setText(`НА РУКИ: ${pay.toLocaleString('ru-RU')} ₽`).setColor(this.misses ? '#ffd166' : '#8ae6a0');
+    if (this.misses) {
+      this.payText.setScale(1.15);
+      this.tweens.add({ targets: this.payText, scale: 1, duration: 200 });
+    }
   }
 
   update() {
@@ -144,7 +154,7 @@ export class WarehouseScene extends Phaser.Scene {
 
   finish() {
     this.done = true;
-    const pay = Math.max(0, BASE_PAY - this.misses * FINE);
+    const pay = Math.max(0, this.basePay - this.misses * FINE);
     state.flags.shiftResult = { hits: this.hits, misses: this.misses, total: this.total, pay };
     const good = this.hits >= Math.ceil(this.total * 0.8);
     this.say(good ? 'Ну… неплохо. Для худого.' : 'Это не разгрузка, это шоу «Разбей сам»!');
@@ -152,7 +162,7 @@ export class WarehouseScene extends Phaser.Scene {
     this.time.delayedCall(1800, () => {
       this.beat?.stop(0.5);
       this.cameras.main.fadeOut(500, 7, 6, 13);
-      this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Location', { loc: 'warehouse', spawnX: 900 }));
+      this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Location', { loc: this.backLoc, spawnX: 900 }));
     });
   }
 }
