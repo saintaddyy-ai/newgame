@@ -22,6 +22,10 @@ export function startEpisode2() {
   if (F.markaInInventory && !hasItem('marka')) giveItem('marka');
   if (F.reyLeadgen || F.reyLeadgenHalf) giveItem('flyers');
   if (!hasItem('mic')) giveItem('mic');
+  // Контакты из Эпизода 1 (при «Сразу Эпизод 2» их ещё нет)
+  addContact('mom', { silent: true });
+  addContact('dan', { silent: true });
+  if (F.rayMet) addContact('ray', { silent: true });
   if (F.reyDebt) {
     state.debts.ray = { amount: 20000, due: 'через 2 недели' };
     quest('e2_debt', { title: 'Долг Рею — 20 000 ₽', note: 'Отдать, отработать или договориться. Рей у арки вечером', giver: 'ray', status: 'active', silent: true });

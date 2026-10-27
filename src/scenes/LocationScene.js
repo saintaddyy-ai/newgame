@@ -341,6 +341,7 @@ export class LocationScene extends Phaser.Scene {
     this.pulseToBeat();
     this.cfg.tick?.(this, dt);
     if (!this.busy) this.phone.flushQueue();
+    this.phone.flushBanners();
     if (this.busy || this.notebook.open || this.pc.open || this.phone.open) return;
 
     const k = this.keys;

@@ -6,7 +6,7 @@ export function quality() {
   return state.settings?.graphics || 'high';
 }
 
-export const QUALITY_LABEL = { high: 'Высокая', medium: 'Средняя', low: 'Низкая' };
+export const QUALITY_LABEL = { high: 'высокая', medium: 'средняя', low: 'низкая' };
 
 // Множитель числа частиц (дождь, пыль, листья)
 export function particles() {
