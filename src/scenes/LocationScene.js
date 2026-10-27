@@ -492,7 +492,7 @@ export class LocationScene extends Phaser.Scene {
     if (!on) return;
     this.dayText.setText(phaseLabel());
     this.cashText.setText(`${state.cash.toLocaleString('ru-RU')} ₽`);
-    this.infoBg.width = Math.max(200, this.dayText.width + 24, this.cashText.width + 24);
+    this.infoBg.setSize(Math.max(200, this.dayText.width + 24, this.cashText.width + 24), 52);
   }
 
   addCash(delta) {
@@ -578,7 +578,7 @@ export class LocationScene extends Phaser.Scene {
   showToast(title, text, color = '#ffd166') {
     this.toastTitle.setText(title).setColor(color);
     this.toastText.setText(text);
-    this.toastBg.width = Math.max(420, this.toastText.width + 60);
+    this.toastBg.setSize(Math.max(420, this.toastText.width + 60), 66);
     this.toastBg.setStrokeStyle(2, Phaser.Display.Color.HexStringToColor(color).color);
     this.tweens.killTweensOf(this.toast);
     this.toast.y = 620;

@@ -116,7 +116,7 @@ export class Dialogue {
     }
     this.nameBg.setVisible(true);
     this.name.setText(name.toUpperCase());
-    this.nameBg.width = this.name.width + 24;
+    this.nameBg.setSize(this.name.width + 24, 34);
     this.nameBg.fillColor = Phaser.Display.Color.HexStringToColor(color || SPEAKER_COLORS[name] || '#ff3d8a').color;
   }
 
