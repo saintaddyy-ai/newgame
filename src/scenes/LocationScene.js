@@ -8,6 +8,7 @@ import { state, addLine, TAGS, ITEMS, giveItem, saveGame, bankTx } from '../stat
 import { getLocation, phaseLabel, advanceTime, useItem, sceneHooks } from '../story/index.js';
 import { sfx, startAmbience, stopAmbience, currentMusic, BEAT } from '../audio.js';
 import { unreadTotal } from '../phone/model.js';
+import { repaintMark } from '../story/episode2/look.js';
 import * as phoneApi from '../phone/model.js';
 
 export const FLOOR = 470;
@@ -29,6 +30,7 @@ export class LocationScene extends Phaser.Scene {
     saveGame({ loc, spawnX: spawnX ?? this.cfg.spawnX, facing });
     this.busy = false;
     this.leaving = false;
+    this.useCooldown = 0;
     this.pill = null;
     // Ссылки на объекты прошлой локации (сцена перезапускается тем же объектом)
     this.heatFill = null;
@@ -42,19 +44,27 @@ export class LocationScene extends Phaser.Scene {
     const cfg = this.cfg;
 
     this.cameras.main.setBounds(0, 0, cfg.width, 540);
+    // Образ Марка (одежда, стрижка) — общий для всех сцен
+    repaintMark(this);
     cfg.draw(this);
 
     this.doors = {};
     (val(cfg.doors) || []).forEach((d) => (this.doors[d.id] = this.makeDoor(d)));
 
-    this.npcDefs = val(cfg.npcs) || [];
+    // Эпизод 2 готовит текстуры людей (работники, прохожие) до того, как они появятся
+    cfg.prepare?.(this);
+    this.npcDefs = (typeof cfg.npcs === 'function' ? cfg.npcs(this) : cfg.npcs) || [];
     this.npcs = {};
     this.npcDefs.forEach((n) => {
-      if (n.when && !n.when()) return;
-      const s = this.add.sprite(n.x, FLOOR + (n.dy || 0), `${n.sprite}_0`).setOrigin(0.5, 1).setDepth(10);
+      // dynamic: человек может прийти или уйти, пока Марк здесь (время идёт) — спрайт создаём всегда
+      const here = !n.when || n.when();
+      if (!here && !n.dynamic) return;
+      const s = this.add.sprite(n.x, FLOOR + (n.dy || 0), `${n.sprite}_0`).setOrigin(0.5, 1).setDepth(n.depth ?? 10);
       s.setFlipX(!!n.flip);
+      if (n.scale) s.setScale(n.scale);
+      s.setVisible(here);
       this.npcs[n.id] = s;
-      this.tweens.add({ targets: s, scaleY: 1.015, duration: 1400 + Math.random() * 400, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
+      this.tweens.add({ targets: s, scaleY: (n.scale || 1) * 1.015, duration: 1400 + Math.random() * 400, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     });
 
     this.player = this.add.sprite(spawnX ?? cfg.spawnX, FLOOR, 'mark_0').setOrigin(0.5, 1).setDepth(20);
@@ -81,7 +91,7 @@ export class LocationScene extends Phaser.Scene {
     this.prompt.add([key, keyT, this.promptLabel]);
     this.tweens.add({ targets: this.prompt, y: '-=4', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
-    const title = this.add.text(480, 250, cfg.title, {
+    const title = this.add.text(480, 250, val(cfg.title), {
       fontFamily: '"Press Start 2P"', fontSize: '20px', color: '#ffffff', stroke: '#ff3d8a', strokeThickness: 6,
     }).setOrigin(0.5).setScrollFactor(0).setDepth(950).setAlpha(0);
     this.tweens.add({ targets: title, alpha: 1, duration: 600, hold: 1600, yoyo: true });
@@ -108,6 +118,8 @@ export class LocationScene extends Phaser.Scene {
         return;
       }
       if (this.busy) return;
+      // Сразу после диалога пробел/E не должен случайно запустить соседний предмет
+      if (this.time.now < this.useCooldown) return;
       if (['e', 'у', 'E', 'У', ' ', 'Enter'].includes(ev.key)) this.tryUse();
       if (['q', 'й', 'Q', 'Й'].includes(ev.key)) this.openNotebook();
       if (['p', 'з', 'P', 'З'].includes(ev.key)) this.phone.show();
@@ -178,8 +190,10 @@ export class LocationScene extends Phaser.Scene {
         this.dialogue.close();
         this.hideCloseup();
         this.busy = false;
+        this.useCooldown = this.time.now + 400;
         if (cost) advanceTime(this, cost);
         this.refreshHud();
+        this.refreshNpcs();
         this.events.emit('scriptDone');
       }
     }
@@ -189,7 +203,7 @@ export class LocationScene extends Phaser.Scene {
     const list = [];
     (val(this.cfg.items) || []).concat(this.extraItems || []).forEach((it) => {
       if (it.when && !it.when()) return;
-      list.push(it);
+      list.push(typeof it.label === 'function' ? { ...it, label: it.label(), key: `${it.x}:${it.label()}` } : it);
     });
     this.npcDefs.forEach((n) => {
       if (!this.npcs[n.id] || !n.talk || (n.talkWhen && !n.talkWhen())) return;
@@ -246,7 +260,8 @@ export class LocationScene extends Phaser.Scene {
     const left = k.left.isDown || k.a.isDown || this.touch.left;
     const right = k.right.isDown || k.d.isDown || this.touch.right;
     const dir = (right ? 1 : 0) - (left ? 1 : 0);
-    this.setSneak(k.shift.isDown && !!dir);
+    // Shift зажат — Марк крадётся (и стоя тоже не привлекает внимания)
+    this.setSneak(k.shift.isDown);
     if (dir) {
       const speed = this.sneaking ? SNEAK_SPEED : SPEED;
       this.player.x = Phaser.Math.Clamp(this.player.x + dir * speed * (dt / 1000), 40, this.cfg.width - 40);
@@ -284,6 +299,22 @@ export class LocationScene extends Phaser.Scene {
       this.prompt.setVisible(false);
     }
     this.lastPrompt = key;
+  }
+
+  // Кто-то пришёл или ушёл по расписанию, пока Марк был здесь
+  refreshNpcs() {
+    this.npcDefs.forEach((n) => {
+      const s = this.npcs[n.id];
+      if (!s || !n.dynamic) return;
+      const here = !n.when || n.when();
+      if (here === s.visible) return;
+      if (here) {
+        s.setVisible(true).setAlpha(0);
+        this.tweens.add({ targets: s, alpha: 1, duration: 500 });
+      } else {
+        this.tweens.add({ targets: s, alpha: 0, duration: 500, onComplete: () => s.setVisible(false).setAlpha(1) });
+      }
+    });
   }
 
   // ---------- Крадучись и зоны ----------

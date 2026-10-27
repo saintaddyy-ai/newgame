@@ -8,7 +8,6 @@ import { BATHROOM } from './shared.js';
 import { BEAT, playMusic, currentMusic, stopMusic, sfx } from '../audio.js';
 
 const F = state.flags;
-const FLOOR = 470;
 
 // ---------- Крупные планы ----------
 

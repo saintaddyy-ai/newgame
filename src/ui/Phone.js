@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { state, clockShort, saveSettings, DAYS } from '../state.js';
-import { sfx, setVolumes, audioCtx } from '../audio.js';
+import { sfx, setVolumes, audioCtx, decodeBlob, playBuffer } from '../audio.js';
 import { voiceSettings } from '../voice.js';
 import { listDemos, playDemo } from '../demos.js';
 import { dbAll, dbPut, dbDelete } from '../db.js';
@@ -874,7 +874,6 @@ export class Phone {
   async playMemo(m) {
     this.stopAudio();
     try {
-      const { decodeBlob, playBuffer } = await import('../audio.js');
       const buf = await decodeBlob(m.blob);
       this.memoPlaying = playBuffer(buf, { volume: 1.4 });
     } catch (e) {

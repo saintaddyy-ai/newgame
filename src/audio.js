@@ -459,6 +459,37 @@ export function startAmbience(kind) {
     nodes.push({ stop: () => clearInterval(id) });
   } else if (kind === 'flat') {
     loopNoise('lowpass', 200, 0.015);
+  } else if (kind === 'street') {
+    // Город днём: гул машин и далёкие голоса
+    loopNoise('lowpass', 300, 0.05);
+    loopNoise('bandpass', 900, 0.015, 0.4);
+    const id = setInterval(() => Math.random() < 0.4 && sfx(Math.random() < 0.5 ? 'birds' : 'coo'), 3100);
+    nodes.push({ stop: () => clearInterval(id) });
+  } else if (kind === 'night') {
+    // Ночь: ветер и редкая машина вдалеке
+    loopNoise('lowpass', 180, 0.04);
+    loopNoise('bandpass', 500, 0.012, 0.3);
+    const id = setInterval(() => Math.random() < 0.3 && sfx('whoosh'), 4200);
+    nodes.push({ stop: () => clearInterval(id) });
+  } else if (kind === 'cafe') {
+    // Кафе: гул голосов, звон чашек, кофемашина
+    loopNoise('bandpass', 700, 0.04, 0.4);
+    const id = setInterval(() => sfx(Math.random() < 0.6 ? 'glass' : 'pour'), 2700);
+    nodes.push({ stop: () => clearInterval(id) });
+  } else if (kind === 'metro') {
+    loopNoise('lowpass', 140, 0.06);
+    loopNoise('bandpass', 2000, 0.008, 0.6);
+    const id = setInterval(() => Math.random() < 0.35 && sfx('chime'), 6000);
+    nodes.push({ stop: () => clearInterval(id) });
+  } else if (kind === 'club') {
+    // Бас из-за стены в такт бита
+    const beat = 60 / BEAT.bpm;
+    const id = setInterval(() => {
+      tone(ctx.currentTime, 55, 0.18, { vol: 0.18, to: 40, dest: out });
+      tone(ctx.currentTime + beat * 2, 55, 0.18, { vol: 0.14, to: 40, dest: out });
+    }, beat * 4000);
+    loopNoise('bandpass', 600, 0.03, 0.4);
+    nodes.push({ stop: () => clearInterval(id) });
   } else if (kind === 'morning') {
     loopNoise('lowpass', 400, 0.05); // далёкий город
     const id = setInterval(() => sfx('birds'), 1900);

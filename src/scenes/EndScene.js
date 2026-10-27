@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { state, saveGame } from '../state.js';
 import { stopMusic, blip, sfx } from '../audio.js';
 import { startEpisode1 } from '../story/episode1.js';
+import { startEpisode2 } from '../story/episode2/main.js';
+import { pulseLevel } from '../story/episode2/world.js';
 
 const MOM = {
   promise: 'Ты пообещал маме всё изменить.',
@@ -65,6 +67,37 @@ function episode1Rows() {
   ];
 }
 
+const RESULT = { fire: 'РАЗЪЕБ — зал кричал твоё имя', ok: 'НОРМ — тебя запомнили', fail: 'ПРОВАЛ — но ты вышел на сцену' };
+const NIGHT = { ray: 'афтепати у Рея (и Лола)', mira: 'крыши с Мирой', dan: 'ночной трек с Дэном в гараже', kira: 'ступеньки «Шаурмы» с Кирой до рассвета' };
+const MEET = { warm: 'тепло — мама достала парадные чашки', awkward: 'неловко — мама мыла чистые чашки', cold: 'холодно — «Марк, на минуточку»', scandal: 'скандал — девушка ушла, баба Валя всё видела' };
+const MANAGER = { dan: 'Дэн (бесплатно, друг)', ray: 'Рей (30%, «воронка»)', olymp: '«Олимп» (20%, профи)' };
+
+function episode2Rows() {
+  const f = state.flags;
+  const fol = state.social.followers;
+  const done = Object.values(state.quests).filter((q) => q.status === 'done').length;
+  const girls = { mira: 'Мира', lola: 'Лола', kira: 'Кира' };
+  const girl = ['mira', 'kira', 'lola'].sort((a, b) => (state.rel[b] || 0) - (state.rel[a] || 0))[0];
+  let ray = 'С Реем — без перемен.';
+  if (f.busted) ray = f.snitchedRay ? 'Попался на облаве и сдал Рея.' : 'Попался на облаве. Рей «тебя не знает».';
+  else if (f.quitRay) ray = 'Ты сказал Рею «я пас». Он это запомнил.';
+  else if (f.courierStage >= 3) ray = 'Отработал «курьером» Рея. В понедельник — новая партия.';
+  else if (f.courierStage) ray = 'Ты в «воронке» Рея: курьер, пакеты, палево.';
+  else if (f.featRay) ray = 'Записал фит с Реем — «ЛИДОГЕН 2 feat. Тень».';
+  return [
+    f.e2MissedPodval ? '«Подвал»: ты не пришёл. Слот отдали Рею.' : `«Подвал»: ${RESULT[f.podvalResult] || '—'}.`,
+    f.exposedRey ? 'Ты крикнул из зала, что Рей читает твои строчки.' : null,
+    f.e2Night ? `Ночь после шоу: ${NIGHT[f.e2Night]}.` : null,
+    (state.rel[girl] || 0) > 0 ? `Ближе всех — ${girls[girl]} (${state.rel[girl]}).` : 'С девушками — пока ничего.',
+    f.momMeet ? `Мама и девушка: ${MEET[f.momMeet]}.` : null,
+    ray,
+    f.e2StudioFight ? `Студия: подрался за гараж${f.e2DanSide === 'mark' ? ', Дэн был на твоей стороне' : ''}.` : f.e2Feat ? 'Студия: договорился и сделал фит.' : null,
+    f.manager ? `Менеджер: ${MANAGER[f.manager]}.` : 'Менеджера нет.',
+    `Ритм ${fol.ritm} · Кадр ${fol.kadr} · Вайб ${fol.vibe}.`,
+    `Независимых дел сделано: ${done}. Денег: ${state.cash.toLocaleString('ru-RU')} ₽.`,
+  ];
+}
+
 // Итоги главы — как схема выборов в Detroit
 export class EndScene extends Phaser.Scene {
   constructor() {
@@ -76,17 +109,24 @@ export class EndScene extends Phaser.Scene {
     this.cameras.main.fadeIn(800, 7, 6, 13);
     this.add.rectangle(0, 0, 960, 540, 0x07060d).setOrigin(0);
     const ep1 = episode === 'ep1';
-    saveGame(ep1 ? { loc: 'apartment', spawnX: 200, done: 'ep1' } : { loc: 'garage', spawnX: 640, done: 'prologue' });
+    const ep2 = episode === 'ep2';
+    saveGame(ep2 ? { loc: 'apartment', spawnX: 200, done: 'ep2' } : ep1 ? { loc: 'apartment', spawnX: 200, done: 'ep1' } : { loc: 'garage', spawnX: 640, done: 'prologue' });
 
-    this.add.text(480, 50, ep1 ? 'ЭПИЗОД 1 ЗАВЕРШЁН' : 'ПРОЛОГ ЗАВЕРШЁН', {
+    this.add.text(480, 44, ep2 ? 'ЭПИЗОД 2 ЗАВЕРШЁН' : ep1 ? 'ЭПИЗОД 1 ЗАВЕРШЁН' : 'ПРОЛОГ ЗАВЕРШЁН', {
       fontFamily: '"Press Start 2P"', fontSize: '24px', color: '#ffffff', stroke: '#ff3d8a', strokeThickness: 8,
     }).setOrigin(0.5);
-    this.add.text(480, 90, ep1 ? '«СЛОМАННЫЙ МИКРОФОН»' : '«ГАРАЖ»', { fontFamily: '"Press Start 2P"', fontSize: '13px', color: '#ff3d8a' }).setOrigin(0.5);
+    this.add.text(480, 82, ep2 ? '«ОТКРЫТЫЙ МИКРОФОН»' : ep1 ? '«СЛОМАННЫЙ МИКРОФОН»' : '«ГАРАЖ»', { fontFamily: '"Press Start 2P"', fontSize: '13px', color: '#ff3d8a' }).setOrigin(0.5);
+    if (ep2) {
+      // «Пульс» скрыт всю главу — показываем только в итогах
+      const lvl = pulseLevel();
+      const colors = { bottom: '#ff6b8a', slide: '#ffd166', hold: '#3df0ff', rise: '#8ae6a0' };
+      this.add.text(480, 108, `ПУЛЬС: ${lvl.name}`, { fontFamily: '"Press Start 2P"', fontSize: '12px', color: colors[lvl.id] }).setOrigin(0.5);
+    }
 
-    const rows = (ep1 ? episode1Rows() : prologueRows()).filter(Boolean);
+    const rows = (ep2 ? episode2Rows() : ep1 ? episode1Rows() : prologueRows()).filter(Boolean);
     // Строки бывают в два ряда — считаем высоту каждой
-    let y = 124;
-    const size = rows.length > 8 ? 17 : 19;
+    let y = ep2 ? 130 : 124;
+    const size = rows.length > 9 ? 16 : rows.length > 8 ? 17 : 19;
     rows.forEach((r, i) => {
       const t = this.add.text(110, y, `◆  ${r}`, {
         fontFamily: '"PT Mono", monospace', fontSize: `${size}px`, color: '#e8e4ff', wordWrap: { width: 760 },
@@ -95,16 +135,16 @@ export class EndScene extends Phaser.Scene {
       this.tweens.add({ targets: t, alpha: 1, x: 130, delay: 500 + i * 380, duration: 400, onStart: () => blip(600 + i * 60, 0.03) });
     });
 
-    const nextText = ep1 ? 'ДАЛЕЕ: ЭПИЗОД 2 — «ОТКРЫТЫЙ МИКРОФОН» · В РАЗРАБОТКЕ' : '▶ ПРОДОЛЖИТЬ: ЭПИЗОД 1 — «СЛОМАННЫЙ МИКРОФОН»';
+    const nextText = ep2 ? 'ДАЛЕЕ: ЭПИЗОД 3 — «ЗАЛЁТ» · В РАЗРАБОТКЕ' : ep1 ? '▶ ПРОДОЛЖИТЬ: ЭПИЗОД 2 — «ОТКРЫТЫЙ МИКРОФОН»' : '▶ ПРОДОЛЖИТЬ: ЭПИЗОД 1 — «СЛОМАННЫЙ МИКРОФОН»';
     const next = this.add.text(480, 466, nextText, { fontFamily: '"Press Start 2P"', fontSize: '11px', color: '#ffd166' }).setOrigin(0.5).setAlpha(0);
     this.tweens.add({ targets: next, alpha: 1, delay: 500 + rows.length * 380 + 400, duration: 800 });
-    const again = this.add.text(480, 506, ep1 ? '[ нажми — в главное меню ]' : '[ нажми, чтобы продолжить ]', { fontFamily: '"PT Mono", monospace', fontSize: '16px', color: '#77729a' }).setOrigin(0.5);
+    const again = this.add.text(480, 506, ep2 ? '[ нажми — в главное меню ]' : '[ нажми, чтобы продолжить ]', { fontFamily: '"PT Mono", monospace', fontSize: '16px', color: '#77729a' }).setOrigin(0.5);
     this.tweens.add({ targets: again, alpha: 0.4, duration: 800, yoyo: true, repeat: -1 });
 
     const go = () => {
       sfx('select');
-      if (ep1) return this.scene.start('Title');
-      const where = startEpisode1();
+      if (ep2) return this.scene.start('Title');
+      const where = ep1 ? startEpisode2() : startEpisode1();
       saveGame(where);
       this.cameras.main.fadeOut(500, 7, 6, 13);
       this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('Location', where));

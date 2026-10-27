@@ -206,18 +206,20 @@ export class Dialogue {
     this.body.setText('');
     this.setSpeaker('Твой выбор', '#ffd166');
     this.setRemark('');
-    // Больше трёх вариантов — строки плотнее, чтобы влезли в окно
+    // Больше трёх вариантов — строки плотнее; больше пяти — окно вырастает вниз
     const dense = options.length > 3;
-    const rowH = options.length > 5 ? 25 : dense ? 30 : 40;
+    const rowH = options.length > 5 ? 27 : dense ? 30 : 40;
+    const need = (dense ? 10 : 22) + options.length * rowH + 8;
+    if (need > BOX_H) this.box.setSize(W - 40, need);
     this.cursor = 0;
     this.readyAt = Date.now() + 250;
 
     options.forEach((opt, i) => {
       const y = BOX_Y + (dense ? 10 : 22) + i * rowH;
       const bg = this.scene.add.rectangle(40, y, W - 80, rowH - 4, 0xffffff, 0.06).setOrigin(0).setScrollFactor(0);
-      const label = this.scene.add.text(54, y + (options.length > 5 ? 3 : dense ? 4 : 6), `${i + 1}. ${opt}`, {
+      const label = this.scene.add.text(54, y + (options.length > 5 ? 4 : dense ? 4 : 6), `${i + 1}. ${opt}`, {
         fontFamily: '"PT Mono", monospace',
-        fontSize: options.length > 5 ? '15px' : dense ? '17px' : '20px',
+        fontSize: options.length > 5 ? '16px' : dense ? '17px' : '20px',
         color: '#f2f0ff',
       }).setScrollFactor(0);
       bg.setInteractive({ useHandCursor: true })
@@ -235,6 +237,7 @@ export class Dialogue {
       let timerTween = null;
       if (timer > 0) {
         this.timerBar.setVisible(true).setScale(1, 1);
+        this.timerBar.y = BOX_Y + this.box.height + 8;
         timerTween = this.scene.tweens.add({
           targets: this.timerBar,
           scaleX: 0,
@@ -272,6 +275,7 @@ export class Dialogue {
   }
 
   clearChoices() {
+    if (this.box.height !== BOX_H) this.box.setSize(W - 40, BOX_H);
     this.choiceItems.forEach((c) => {
       c.bg.destroy();
       c.label.destroy();

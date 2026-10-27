@@ -7,6 +7,8 @@ import { LocationScene } from './scenes/LocationScene.js';
 import { StudioScene } from './scenes/StudioScene.js';
 import { EndScene } from './scenes/EndScene.js';
 import { WarehouseScene } from './scenes/WarehouseScene.js';
+import { StageScene } from './scenes/StageScene.js';
+import { ChaseScene } from './scenes/ChaseScene.js';
 import { state } from './state.js';
 
 // Для автотестов и отладки из консоли
@@ -33,6 +35,6 @@ loadFonts().then(() => {
     pixelArt: true,
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     input: { activePointers: 3 },
-    scene: [BootScene, TitleScene, LocationScene, StudioScene, EndScene, WarehouseScene],
+    scene: [BootScene, TitleScene, LocationScene, StudioScene, EndScene, WarehouseScene, StageScene, ChaseScene],
   });
 });

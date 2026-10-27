@@ -3,6 +3,7 @@ import { unlockAudio, sfx } from '../audio.js';
 import { state, resetState, readSave, loadGame, addLine, saveGame } from '../state.js';
 import { drawSkyline } from '../story/backdrops.js';
 import { startEpisode1 } from '../story/episode1.js';
+import { startEpisode2 } from '../story/episode2/main.js';
 
 // Выборы пролога «по умолчанию» — для старта сразу с Эпизода 1
 function prologueDefaults() {
@@ -20,6 +21,26 @@ function prologueDefaults() {
     { id: 'arena', text: 'Однажды я соберу Арену', tag: 'dream' },
   ].forEach(addLine);
   state.tracks.push({ title: 'Мама, прости', theme: 'pain', lines: [], voice: false, score: null });
+}
+
+// Выборы Эпизода 1 «по умолчанию» — для старта сразу со второго эпизода
+function episode1Defaults() {
+  prologueDefaults();
+  state.episode = 'ep1';
+  Object.assign(state.flags, {
+    e1: 'outro', e1MicBroke: true, rayMet: true, rayFriend: true, shifts: 1, workedWed: true, jobUnlocked: true, micType: 'oktava',
+    e1Rehearsal: true, e1FinaleTalk: true, e1Done: true, reyLeadgenHalf: true, moneyPathRay: true, rayDealDone: true, markaOffered: true, danSawMic: true,
+  });
+  state.rel.ray = 2;
+  state.rel.dan = 2;
+  state.cash = 3200;
+  state.stats.fame = 1;
+  [
+    { id: 'every_lead', text: 'Во дворе каждый — чей-то лид', tag: 'street' },
+    { id: 'warehouse', text: 'Склад глотает мечты по сорок коробок за смену', tag: 'pain' },
+    { id: 'lamp_cover', text: 'В свете фонаря я почти обложка', tag: 'dream' },
+  ].forEach(addLine);
+  state.tracks.push({ title: 'Мама, прости (репетиция)', theme: 'pain', lines: [], voice: false, score: null });
 }
 
 export class TitleScene extends Phaser.Scene {
@@ -49,16 +70,17 @@ export class TitleScene extends Phaser.Scene {
     if (save) items.push({ label: '▶ ПРОДОЛЖИТЬ', run: () => this.continueGame() });
     items.push({ label: save ? 'НОВАЯ ИГРА' : '▶ НОВАЯ ИГРА', run: () => this.newGame() });
     items.push({ label: 'СРАЗУ ЭПИЗОД 1', run: () => this.episode1() });
+    items.push({ label: 'СРАЗУ ЭПИЗОД 2', run: () => this.episode2() });
 
     this.sel = 0;
     this.menu = items.map((it, i) => {
-      const t = this.add.text(480, 330 + i * 44, it.label, { fontFamily: '"Press Start 2P"', fontSize: '15px', color: '#c9c4ee' }).setOrigin(0.5).setDepth(10);
+      const t = this.add.text(480, 320 + i * 40, it.label, { fontFamily: '"Press Start 2P"', fontSize: '15px', color: '#c9c4ee' }).setOrigin(0.5).setDepth(10);
       t.setInteractive({ useHandCursor: true }).on('pointerover', () => this.select(i)).on('pointerdown', () => this.pick(i));
       return { t, ...it };
     });
     this.select(0);
 
-    this.add.text(480, 506, 'ДЕМО · ПРОЛОГ + ЭПИЗОД 1  |  18+  |  ← → / A D — ходить   E — действие   Q — тетрадь', {
+    this.add.text(480, 506, 'ПРОЛОГ + 2 ЭПИЗОДА  |  18+  |  ← → ходить · Shift тихо · E действие · Q тетрадь · P телефон', {
       fontFamily: '"PT Mono", monospace', fontSize: '14px', color: '#77729a',
     }).setOrigin(0.5).setDepth(10);
 
@@ -104,6 +126,13 @@ export class TitleScene extends Phaser.Scene {
     this.go('Location', where);
   }
 
+  episode2() {
+    episode1Defaults();
+    const where = startEpisode2();
+    saveGame(where);
+    this.go('Location', where);
+  }
+
   continueGame() {
     const where = loadGame();
     if (!where) return this.newGame();
@@ -112,7 +141,12 @@ export class TitleScene extends Phaser.Scene {
       saveGame(w);
       return this.go('Location', w);
     }
-    if (where.done === 'ep1') return this.go('End', { episode: 'ep1' });
+    if (where.done === 'ep1') {
+      const w = startEpisode2();
+      saveGame(w);
+      return this.go('Location', w);
+    }
+    if (where.done === 'ep2') return this.go('End', { episode: 'ep2' });
     this.go('Location', { loc: where.loc, spawnX: where.spawnX, facing: where.facing });
   }
 }
