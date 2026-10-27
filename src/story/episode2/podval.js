@@ -336,6 +336,8 @@ export async function runShow(ctx) {
 async function afterMark(ctx) {
   const { d, wait, sfx } = ctx;
   F.e2Show = 'after';
+  // Вечер в «Подвале» идёт своим ходом: три номера до тебя и twinspeak после
+  if (now() < at(22, 30)) ctx.time(at(22, 30) - now());
   const r = F.podvalResult;
   if (r === 'fire') {
     pulse(10);
@@ -406,7 +408,7 @@ async function nightChoice(ctx) {
   const pick = opts[c][0];
   F.e2Night = pick;
   d.close();
-  ctx.time(40);
+  ctx.time(Math.max(40, at(23, 40) - now()));
   if (pick === 'ray') {
     state.stats.fame += 1;
     state.stats.addiction += 1;
