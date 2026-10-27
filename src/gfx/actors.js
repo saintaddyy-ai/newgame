@@ -6,9 +6,11 @@ import { ART } from './pix.js';
 
 // Подготовить лист кадров (если его ещё нет или внешность поменялась)
 export function ensureActor(scene, key, spec, kind = 'npc') {
-  const sp = spec || CAST_SPECS[key];
-  if (!sp) return key;
   const tex = scene.textures.exists(key) ? scene.textures.get(key) : null;
+  // Без явного описания — то, по которому лист уже нарисован: иначе образ Марка (стрижка, одежда)
+  // сбрасывался к базовому при каждом входе в локацию
+  const sp = spec || tex?.__spec || CAST_SPECS[key];
+  if (!sp) return key;
   const sig = JSON.stringify(sp);
   if (tex && tex.__sig === sig && animSet(kind).every((n) => tex.__anims?.includes(n))) return key;
   buildSheet(scene, key, sp, kind);

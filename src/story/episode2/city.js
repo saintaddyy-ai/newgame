@@ -4,7 +4,7 @@ import { F, state, pulse, energy, now, day, addFollowers, faceFollowers, feed, o
 import { workerHello, workerMood } from './workers.js';
 import { randomSpec, personTexture } from './people.js';
 import { repaintMark, OUTFITS } from './look.js';
-import { addActor, walk as actorWalk } from '../../gfx/actors.js';
+import { addActor, walk as actorWalk, pose, idle, talk as actorTalk } from '../../gfx/actors.js';
 
 // ---------- Работники кафе ----------
 
@@ -150,6 +150,37 @@ const BARBER = voiced('Хачик', {
   gossip2: 'Рей твой приходил. Просил «как у Эминема». Я сделал как у Рея. Он не заметил.',
 });
 
+// Кресла в «Опасной бритве» стоят у зеркал (x 300 и 600); сиденье — на 0,55 м от пола у стены.
+// Марк садится в ближайшее кресло, Хачик встаёт рядом и стрижёт, потом Марк встаёт
+const BARBER_CHAIRS = [300, 600];
+async function sitInBarberChair(ctx, during) {
+  const { scene, wait } = ctx;
+  const p = scene.player;
+  const barber = scene.npcs?.barber;
+  const chair = BARBER_CHAIRS.reduce((a, b) => (Math.abs(b - p.x) < Math.abs(a - p.x) ? b : a));
+  await ctx.walk(p, chair, 200);
+  p.setFlipX(false);
+  const y0 = p.y;
+  p.__pose = 'sit';
+  pose(p, 'sit');
+  // Кресло стоит у стены (чуть глубже, чем ходит Марк) и выше табурета — приподнимаем на сиденье
+  p.y = y0 - 22;
+  if (barber) {
+    await ctx.walk(barber, chair + 64, 140);
+    barber.setFlipX(true);
+    actorTalk(barber);
+  }
+  await wait(500);
+  try {
+    await during();
+  } finally {
+    if (barber?.active) idle(barber);
+    p.y = y0;
+    p.__pose = null;
+    idle(p);
+  }
+}
+
 export async function barberTalk(ctx) {
   const { d, fx, sfx } = ctx;
   if (once('barber_hello')) await d.say('Хачик', BARBER.hello);
@@ -164,17 +195,15 @@ export async function barberTalk(ctx) {
   if (state.cash < cut[2]) return d.say('Хачик', 'Дорогой, денег нет — красоты нет. Приходи богатым. Или хотя бы с чаевыми.');
   ctx.cash(-cut[2], `стрижка: ${cut[1]}`);
   d.close();
-  ctx.scene.player.__pose = 'sit';
-  await ctx.anim('sit', 1200);
-  ctx.scene.player.__pose = null;
-  sfx('scissors');
-  ctx.time(60);
-  fx.dust(ctx.scene.player.x, 300, 80);
-  state.look ||= {};
-  F.lookHair = pick;
-  markLook(1);
-  repaintMark(ctx.scene);
-  await d.think('Зеркало. Хачик крутит кресло. «Ну?» Я… другой. Тот же — но другой.');
+  await sitInBarberChair(ctx, async () => {
+    sfx('scissors');
+    ctx.time(60);
+    fx.dust(ctx.scene.player.x, 360, 80);
+    F.lookHair = pick;
+    markLook(1);
+    repaintMark(ctx.scene);
+    await d.think('Зеркало. Хачик крутит кресло. «Ну?» Я… другой. Тот же — но другой.');
+  });
   if (pick === 'bleach') F.e2Bleach = true;
 }
 
