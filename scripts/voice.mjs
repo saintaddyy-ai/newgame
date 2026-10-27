@@ -5,6 +5,7 @@
 //   ELEVENLABS_API_KEY=... npm run voice
 //   VOICE_PROVIDER=yandex YANDEX_API_KEY=... npm run voice
 //   npm run voice -- --redo=Мама,Рей   переозвучить персонажей после смены голоса
+//   npm run voice -- --file=episode1   только реплики из одного файла сценария
 //   npm run voice -- --dry --prune      удалить файлы реплик, которых больше нет в игре
 //   В облачной среде Claude Code: NODE_USE_ENV_PROXY=1 (Node ходит через прокси)
 //
@@ -24,6 +25,7 @@ const VOICES = JSON.parse(fs.readFileSync(path.join(ROOT, 'src/data/voices.json'
 const args = process.argv.slice(2);
 const DRY = args.includes('--dry');
 const ONLY = (args.find((a) => a.startsWith('--only=')) || '').slice(7); // --only=Рей
+const FILE = (args.find((a) => a.startsWith('--file=')) || '').slice(7); // --file=episode1 — только реплики из этого файла
 // --redo=Мама,Рей — переозвучить персонажей заново (например, после смены голоса)
 const REDO = (args.find((a) => a.startsWith('--redo=')) || '').slice(7).split(',').filter(Boolean);
 const PROVIDER = process.env.VOICE_PROVIDER || 'elevenlabs';
@@ -100,7 +102,7 @@ function add(map, speaker, text, file) {
   const clean = splitRemarks(text).clean;
   if (!clean) return;
   const id = lineId(speaker, clean);
-  if (!map.has(id)) map.set(id, { id, speaker, text: clean, file });
+  if (!map.has(id)) map.set(id, { id, speaker, text: clean, file, remark: clean !== text.trim() });
 }
 
 function voiceFor(speaker) {
@@ -139,6 +141,9 @@ async function yandex(line) {
 async function main() {
   let lines = collect();
   if (ONLY) lines = lines.filter((l) => l.speaker === ONLY);
+  if (FILE) lines = lines.filter((l) => l.file.includes(FILE));
+  // --remarks: сначала реплики, у которых убрали ремарку в скобках (раньше они звучали)
+  if (args.includes('--remarks')) lines = lines.filter((l) => l.remark);
   fs.mkdirSync(OUT, { recursive: true });
   if (!DRY) for (const l of lines) if (REDO.includes(l.speaker)) fs.rmSync(path.join(OUT, `${l.id}.mp3`), { force: true });
   const todo = lines.filter((l) => !fs.existsSync(path.join(OUT, `${l.id}.mp3`)));

@@ -200,9 +200,9 @@ export class Dialogue {
     if (!this.active) this.open();
     this.clearChoices();
     this.setSpeaker(name, color);
-    const { clean, remark } = splitRemarks(text);
+    const { clean, display, remark } = splitRemarks(text);
     this.setRemark(remark);
-    this.type(clean, { color: '#f2f0ff', fontStyle: 'normal' });
+    this.type(display, { color: '#f2f0ff', fontStyle: 'normal' });
     const emo = this.emotion(clean);
     this.animatePortrait(emo);
     if (name) this.onSpeak?.(name, emo);
@@ -215,9 +215,9 @@ export class Dialogue {
     if (!this.active) this.open();
     this.clearChoices();
     this.setSpeaker(null);
-    const { clean, remark } = splitRemarks(text);
+    const { clean, display, remark } = splitRemarks(text);
     this.setRemark(remark);
-    this.type(clean, { color: '#a9a6c8', fontStyle: 'italic' });
+    this.type(display, { color: '#a9a6c8', fontStyle: 'italic' });
     playVoice('think', clean);
     return new Promise((resolve) => (this.onAdvance = resolve));
   }

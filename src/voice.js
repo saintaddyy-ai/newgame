@@ -5,15 +5,14 @@ import { audioCtx, loadBuffer, playBuffer } from './audio.js';
 // Ремарки в скобках («(шёпотом) …») не озвучиваются и показываются отдельной строкой
 export function splitRemarks(text) {
   const remarks = [];
-  const clean = text
-    .replace(/\(([^)]*)\)/g, (_, r) => {
-      remarks.push(r.trim());
-      return ' ';
-    })
-    .replace(/\s+/g, ' ')
-    .replace(/\s+([.,!?…»])/g, '$1')
-    .trim();
-  return { clean, remark: remarks.join(' · ') };
+  const stripped = text.replace(/\(([^)]*)\)/g, (_, r) => {
+    remarks.push(r.trim());
+    return ' ';
+  });
+  // clean — для озвучки и id файла; display — то, что видит игрок (пробелы как в сценарии)
+  const clean = stripped.replace(/\s+/g, ' ').replace(/\s+([.,!?…»])/g, '$1').trim();
+  const display = stripped.replace(/\s{2,}/g, ' ').trim();
+  return { clean, display, remark: remarks.join(' · ') };
 }
 
 // Помечает набор реплик для озвучки: voiced('Дэн', { new: '…', old: '…' }) — скрипт найдёт их по этому вызову

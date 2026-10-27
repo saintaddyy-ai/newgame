@@ -134,7 +134,8 @@ export function platformPeople(scene) {
   all.forEach((spec, i) => {
     const isLead = spec === specs[right];
     const isCop = !isLead && i === (right + 2) % all.length;
-    const key = personTexture(scene, randomSpec(`plat_${i}_${F.e2Seed}`, spec), `plat_${i}`);
+    // Текстура по самой внешности — иначе при повторном визите лид мог бы «надеть» чужую куртку
+    const key = personTexture(scene, randomSpec(`plat_${i}_${F.e2Seed}`, spec));
     list.push({ id: `plat_${i}`, name: 'Человек на платформе', sprite: key, x: 520 + i * 300, flip: i % 2 === 1, isLead, isCop });
   });
   return list.map((p) => ({ ...p, label: 'Подойти', talk: (ctx) => platformTalk(ctx, p) }));

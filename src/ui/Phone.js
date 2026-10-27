@@ -599,6 +599,16 @@ export class Phone {
     }
   }
 
+  // Сцена началась, пока звонит телефон: звонок ждёт конца сцены и зазвонит снова
+  deferRinging() {
+    const r = this.ringing;
+    if (!r) return;
+    this.ringing = null;
+    this.incoming = false;
+    this.ringLoop?.remove();
+    (this.queue ||= []).unshift(r);
+  }
+
   // Вызывается сценой, когда она освободилась
   flushQueue() {
     if (!this.queue?.length || this.scene.busy || this.ringing) return;

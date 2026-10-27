@@ -192,6 +192,7 @@ export class LocationScene extends Phaser.Scene {
   }
 
   async runScript(fn, { cost = 0 } = {}) {
+    this.phone.deferRinging();
     if (this.phone.open) this.phone.hide(true);
     this.busy = true;
     this.prompt.setVisible(false);
@@ -685,7 +686,10 @@ export class LocationScene extends Phaser.Scene {
     this.infoBg = this.add.rectangle(0, 0, 240, 52, 0x0c0a16, 0.85).setOrigin(0).setStrokeStyle(2, 0x3df0ff);
     this.dayText = this.add.text(12, 9, '', { fontFamily: '"Press Start 2P"', fontSize: '10px', color: '#3df0ff' });
     this.cashText = this.add.text(12, 28, '', { fontFamily: '"PT Mono", monospace', fontSize: '17px', color: '#ffffff' });
-    this.info.add([this.infoBg, this.dayText, this.cashText]);
+    // Энергия (Эпизод 2): тонкая полоска под деньгами
+    this.energyBg = this.add.rectangle(12, 50, 120, 5, 0x2a2838).setOrigin(0);
+    this.energyFill = this.add.rectangle(12, 50, 120, 5, 0x8ae6a0).setOrigin(0);
+    this.info.add([this.infoBg, this.dayText, this.cashText, this.energyBg, this.energyFill]);
     const btn = (this.hud = uiContainer(this, 892, 34, 960));
     const bg = this.add.rectangle(0, 0, 100, 44, 0x0c0a16, 0.85).setStrokeStyle(2, 0xffd166);
     const t = this.add.text(-38, 0, '✎ [Q]', { fontFamily: '"PT Mono", monospace', fontSize: '18px', color: '#ffd166' }).setOrigin(0, 0.5);
@@ -756,6 +760,14 @@ export class LocationScene extends Phaser.Scene {
     this.cashText.setText(`${state.cash.toLocaleString('ru-RU')} ₽`);
     this.infoBg.setSize(Math.max(200, this.dayText.width + 24, this.cashText.width + 24), 52);
     this.heatFill?.setSize(Math.max(1, 76 * Math.min(1, state.heat / 100)), 10);
+    const ep2 = state.episode === 'ep2';
+    this.energyBg.setVisible(ep2);
+    this.energyFill.setVisible(ep2);
+    if (ep2) {
+      const e = Math.max(0, Math.min(100, state.energy));
+      this.energyFill.setSize(Math.max(1, 1.2 * e), 5).setFillStyle(e < 25 ? 0xff6b6b : e < 50 ? 0xffd166 : 0x8ae6a0);
+      this.infoBg.setSize(this.infoBg.width, 60);
+    }
   }
 
   addCash(delta, label) {

@@ -54,6 +54,12 @@ export const ITEMS = {
   flyers: 'Флаеры «ЛИДОГЕН»',
   mic: 'Новый микрофон',
   sticker: 'Стикер jeffrY#creator',
+  token: 'Жетон «Речная» от Адама',
+  package: 'Пакет Рея',
+  packs: 'Пакеты Рея «на реализацию»',
+  ticket: 'Билет на «Арену»',
+  gasket: 'Прокладка для крана',
+  photo_old: 'Фото со школьной линейки',
 };
 
 export function hasLine(id) {

@@ -155,7 +155,7 @@ const garage = {
   doors: [{ id: 'gate', x: 69, w: 122, h: 228, metal: true, color: 0x4a505c }],
   async onEnter(ctx) {
     if (F.e2SleptAt === 'garage' && !F[`e2Morning_${day()}`]) return M.morning(ctx);
-    if (F.e2Night === 'dan' && !F.e2DanNightTrack) return danNightTrack(ctx);
+    if (F.e2Night === 'dan' && !F.e2DanNightTrack && day() === 'fri') return danNightTrack(ctx);
     if (F.e2KidRecording && state.flags.lastTrack && !F.e2KidTrackDone) {
       F.e2KidTrackDone = true;
       return ctx.d.say('Дэн', 'Трек про двор готов. Беги к пацану, пусть снимает.');
@@ -197,11 +197,11 @@ async function danNightTrack(ctx) {
 
 const garage_wc = {
   title: 'КАМОРКА ЗА КОВРОМ',
-  width: 600,
+  width: 960,
   spawnX: 200,
   ambience: 'bath',
   steps: 'stepTile',
-  draw: (s) => drawInterior(s, 600, {
+  draw: (s) => drawInterior(s, 960, {
     wall: 'concrete', wallColor: 0x4a4a52, floor: 0x3a3a40,
     props: [{ type: 'bulb', x: 300, y: 70 }, { type: 'toilet', x: 380 }, { type: 'sink', x: 150 },
       { type: 'scribbles', x: 60, y: 120, lines: ['ТЕНЬ + ДЭН = ПЛАТИНА', 'здесь был Рей', 'тишина. тишина.', 'это контент'] }],
@@ -448,11 +448,11 @@ const cafe_noch = cafeLocation('noch', 'БАР-КАФЕ «НОЧЬ»', { wall: '
 
 const cafe_wc = {
   title: 'ТУАЛЕТ',
-  width: 800,
+  width: 960,
   spawnX: 400,
   ambience: 'bath',
   steps: 'stepTile',
-  draw: (s) => drawInterior(s, 800, {
+  draw: (s) => drawInterior(s, 960, {
     wall: 'tile', wallColor: 0x8aa0a8, floor: 0x4a5a60,
     props: [{ type: 'mirror', x: 250 }, { type: 'sink', x: 250 }, { type: 'toilet', x: 560 }, { type: 'bulb', x: 400, y: 50 },
       { type: 'scribbles', x: 430, y: 130, lines: ['здесь была жизнь', 'Кид Платина — фуфло', 'позвони маме'] }],
@@ -502,12 +502,12 @@ async function timurTalk(ctx) {
 // «Шаурма» ночью: ступеньки у входа (выбор ночи — Кира)
 const shawarma_steps = {
   title: 'СТУПЕНЬКИ У «ШАУРМЫ»',
-  width: 900,
+  width: 960,
   spawnX: 400,
   ambience: 'night',
   steps: 'stepConcrete',
   night: 0.45,
-  draw: (s) => drawStreet(s, 900, { seed: 5, lamps: [700], buildings: [{ x: 100, w: 500, h: 300, color: 0x2e3a48, shop: true, sign: 'ШАУРМА 24', signColor: '#ffd166', awning: 0xc0303a }] }),
+  draw: (s) => drawStreet(s, 960, { seed: 5, lamps: [700], buildings: [{ x: 100, w: 500, h: 300, color: 0x2e3a48, shop: true, sign: 'ШАУРМА 24', signColor: '#ffd166', awning: 0xc0303a }] }),
   prepare: prepCast(['kira']),
   lamps: [{ x: 686, y: 200, r: 130, cone: true }, { x: 350, y: 280, r: 110, color: 0xffd166, alpha: 0.4 }],
   onEnter: G.kiraSteps,
@@ -576,11 +576,11 @@ const clothes = {
 
 const photolab = {
   title: '«ПРОЯВКА»',
-  width: 900,
+  width: 960,
   spawnX: 800,
   ambience: 'flat',
   steps: 'stepWood',
-  draw: (s) => drawInterior(s, 900, { wall: 'paint', wallColor: 0x3a1a1a, floor: 0x2a1a1a, props: [{ type: 'counter', x: 200, w: 360 }, { type: 'poster', x: 620, y: 130, color: 0xffd166, text: 'ПЛЁНКА' }, { type: 'poster', x: 720, y: 150, color: 0x8aa0b8 }] }),
+  draw: (s) => drawInterior(s, 960, { wall: 'paint', wallColor: 0x3a1a1a, floor: 0x2a1a1a, props: [{ type: 'counter', x: 200, w: 360 }, { type: 'poster', x: 620, y: 130, color: 0xffd166, text: 'ПЛЁНКА' }, { type: 'poster', x: 720, y: 150, color: 0x8aa0b8 }] }),
   prepare: prepCast(['photolab']),
   lamps: [{ x: 400, y: 100, r: 160, color: 0xff3d3d, alpha: 0.35 }],
   npcs: () => [{ id: 'photo', name: 'Фотограф', sprite: cast('photolab'), x: 380, flip: true, talk: S.photolabTalk, cost: 5 }],
@@ -589,11 +589,11 @@ const photolab = {
 
 const plumbing = {
   title: '«КРАН-СЕРВИС»',
-  width: 900,
+  width: 960,
   spawnX: 800,
   ambience: 'flat',
   steps: 'stepWood',
-  draw: (s) => drawInterior(s, 900, { wall: 'tile', wallColor: 0xa8c0c8, floor: 0x4a4a4a, props: [{ type: 'shelf', x: 150, w: 300, y: 130 }, { type: 'counter', x: 480, w: 260 }, { type: 'sink', x: 820 }] }),
+  draw: (s) => drawInterior(s, 960, { wall: 'tile', wallColor: 0xa8c0c8, floor: 0x4a4a4a, props: [{ type: 'shelf', x: 150, w: 300, y: 130 }, { type: 'counter', x: 480, w: 260 }, { type: 'sink', x: 820 }] }),
   prepare: prepCast(['plumber']),
   npcs: () => [{ id: 'plumber', name: 'Виталик', sprite: cast('plumber'), x: 600, flip: true, talk: S.plumberTalk, cost: 5 }],
   items: [exit(840, 'Выйти', 'shops', 2000, { cost: 2, facing: 'left' })],
@@ -794,12 +794,12 @@ const backstage = {
 
 const podval_yard = {
   title: 'ДВОРИК У ЧЁРНОГО ХОДА',
-  width: 900,
+  width: 960,
   spawnX: 120,
   ambience: 'night',
   steps: 'stepWet',
   night: 0.4,
-  draw: (s) => drawInterior(s, 900, { wall: 'brick', wallColor: 0x2a2228, floor: 0x1e1e24, props: [{ type: 'bulb', x: 160, y: 120 }, { type: 'scribbles', x: 420, y: 150, lines: ['2002', 'это работает'] }] }),
+  draw: (s) => drawInterior(s, 960, { wall: 'brick', wallColor: 0x2a2228, floor: 0x1e1e24, props: [{ type: 'bulb', x: 160, y: 120 }, { type: 'scribbles', x: 420, y: 150, lines: ['2002', 'это работает'] }] }),
   lamps: [{ x: 160, y: 124, r: 100, color: 0xffd27a, alpha: 0.5 }],
   npcs: () => [{ id: 'roma', name: 'Рома', sprite: 'roma', x: 560, flip: true, talk: P.romaYard, cost: 0 }],
   items: [exit(60, 'Обратно в гримёрку', 'backstage', 900, { cost: 0, facing: 'left' })],

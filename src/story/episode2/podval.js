@@ -133,7 +133,8 @@ export async function miraMeet(ctx) {
 
 export async function hallEnter(ctx) {
   const { d } = ctx;
-  if (F.e2Show === 'mark_done') return afterMark(ctx);
+  // Вернулись со сцены — дальше программа вечера
+  if (F.e2Show === 'mark' && F.podvalResult) return afterMark(ctx);
   if (F.e2PodvalDone) return;
   if (once('podval_hall')) {
     await d.think('Низкий потолок, трубы, красный свет. Сто человек — и каждый дышит в затылок соседу. Пахнет потом, пивом и чем-то сладким.');
