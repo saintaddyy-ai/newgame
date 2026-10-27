@@ -1,5 +1,6 @@
 // Живой мир Эпизода 2: часы, расписания, настроение людей, «Пульс», энергия.
 import { state, hhmm, DAYS } from '../../state.js';
+import { drainNight } from '../../needs.js';
 
 const F = state.flags;
 export const DAY_ORDER = ['fri', 'sat', 'sun'];
@@ -23,6 +24,7 @@ export function nextDay() {
   if (i >= DAY_ORDER.length - 1) return false;
   state.time.day = DAY_ORDER[i + 1];
   state.time.min = at(10);
+  drainNight();
   // Новый день: подписчики «за сегодня» считаются заново, у всех новое настроение
   Object.assign(state.social.dayStart, state.social.followers);
   F.e2Dates = 0;

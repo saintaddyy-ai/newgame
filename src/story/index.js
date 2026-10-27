@@ -4,6 +4,7 @@ import { LOCATIONS as PROLOGUE } from './prologue.js';
 import { LOCATIONS as EP1, PHASES, ITEM_USE as EP1_ITEMS } from './episode1.js';
 import * as EP2 from './episode2/index.js';
 import { REPLIES, callScript, phoneTick } from './phoneStory.js';
+import { checkNeeds } from '../needs.js';
 
 const EPISODES = { prologue: PROLOGUE, ep1: EP1, ep2: EP2.LOCATIONS };
 
@@ -31,10 +32,12 @@ export function useItem(id) {
 export function sceneHooks(scene) {
   phoneTick();
   if (state.episode === 'ep2') EP2.sceneHooks(scene);
+  checkNeeds(scene);
   // После каждой сцены телефон проверяет, не пора ли кому-то написать
   const onDone = () => {
     phoneTick();
     if (state.episode === 'ep2') EP2.afterScript(scene);
+    checkNeeds(scene);
   };
   scene.events.on('scriptDone', onDone);
   scene.events.once('shutdown', () => scene.events.off('scriptDone', onDone));

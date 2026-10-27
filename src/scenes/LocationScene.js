@@ -18,6 +18,7 @@ import { buildDoor, swingDoor } from '../gfx/doors.js';
 import { rain, fog, snow, dust } from '../gfx/weather.js';
 import { leaves, steam, distantWalkers, skyBirds } from '../gfx/life.js';
 import { applyLook, aberration } from '../gfx/fx.js';
+import { walkFactor, remark, food as addFood, clean as addClean, needsOn, FOOD_LOW, FOOD_WEAK, CLEAN_LOW, CLEAN_BAD } from '../needs.js';
 
 export const FLOOR = 470;
 const SPEED = 260;
@@ -25,6 +26,25 @@ const USE_RANGE = 80;
 const STEP_EVERY = 300;
 const SNEAK_SPEED = 110;
 const val = (v) => (typeof v === 'function' ? v() : v);
+const NEED_W = 46;
+
+// Значки самочувствия 7×7: молния (силы), миска (сытость), капля (чистота)
+function needIcons(scene) {
+  if (scene.textures.exists('need_clean')) return;
+  const draw = (key, rows, colors) => {
+    const c = scene.textures.createCanvas(key, 7, 7);
+    const g = c.getContext();
+    rows.forEach((row, y) => [...row].forEach((ch, x) => {
+      if (ch === '.') return;
+      g.fillStyle = colors[ch];
+      g.fillRect(x, y, 1, 1);
+    }));
+    c.refresh();
+  };
+  draw('need_energy', ['...aa..', '..aa...', '.aaaaa.', '...aa..', '..aa...', '.aa....', '.a.....'], { a: '#ffd166' });
+  draw('need_food', ['.s.s.s.', '..s.s..', 'aaaaaaa', 'abbbbba', '.abbba.', '..aaa..', '.......'], { a: '#f0c060', b: '#c07a30', s: '#d8d8e8' });
+  draw('need_clean', ['...a...', '..aaa..', '.aabaa.', '.abaaa.', 'aaaaaaa', '.aaaaa.', '..aaa..'], { a: '#6ad8ff', b: '#e8f8ff' });
+}
 
 // Универсальная локация: фон, двери, герой, NPC и предметы описываются в story/*.js
 export class LocationScene extends Phaser.Scene {
@@ -122,7 +142,6 @@ export class LocationScene extends Phaser.Scene {
       fontFamily: '"PT Mono", monospace', fontSize: '17px', color: '#ffffff',
     }).setOrigin(0, 0.5);
     this.prompt.add([this.promptBg, key, this.promptLabel]);
-    this.tweens.add({ targets: this.prompt, y: '-=4', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
 
     const title = this.add.text(480, 250, val(cfg.title), {
       fontFamily: '"Press Start 2P"', fontSize: '20px', color: '#ffffff', stroke: '#ff3d8a', strokeThickness: 6,
@@ -226,6 +245,31 @@ export class LocationScene extends Phaser.Scene {
       shower: (x) => shower(this, x ?? this.player.x),
       ride: () => rideCloseup(this),
       mirror: () => mirrorCloseup(this),
+      // Поесть: анимация, сытость (+энергия в Эп.2). Помыться: душ или раковина
+      eat: async (amount, { ms = 1400, energy: en = 0 } = {}) => {
+        this.dialogue.close();
+        await gesture(this, this.player, 'eat', ms);
+        addFood(amount);
+        if (en) state.energy = Math.min(100, state.energy + en);
+        this.refreshHud();
+        this.bumpNeed('food');
+      },
+      wash: async (amount = 100, { full = true } = {}) => {
+        this.dialogue.close();
+        if (full) await shower(this, this.player.x);
+        else await gesture(this, this.player, 'wash', 1600);
+        addClean(amount);
+        this.refreshHud();
+        this.bumpNeed('clean');
+      },
+      food: (d) => {
+        addFood(d);
+        this.refreshHud();
+      },
+      dirt: (d) => {
+        addClean(-d);
+        this.refreshHud();
+      },
     };
   }
 
@@ -299,6 +343,19 @@ export class LocationScene extends Phaser.Scene {
       this.player.setFlipX(it.npc.x < tx);
       it.npc.setFlipX(tx < it.npc.x);
     }
+    // Если от Марка пахнет — собеседник сначала скажет об этом (раз в день)
+    if (it.npc) {
+      const npcId = it.key.slice(4);
+      const r = remark(npcId);
+      if (r) {
+        const run = it.use;
+        const name = this.npcDefs.find((n) => n.id === npcId)?.name;
+        return this.runScript(async (ctx) => {
+          await ctx.d.say(name || it.label.replace(/^Поговорить: /, ''), r);
+          await run(ctx);
+        }, { cost: state.episode === 'ep2' ? it.cost ?? 0 : 0 });
+      }
+    }
     let usePose = it.npc ? null : it.pose ?? USE_POSE[it.sfx];
     let cleanup = null;
     if (!it.npc) this.player.setFlipX(it.x < this.player.x - 4);
@@ -342,7 +399,13 @@ export class LocationScene extends Phaser.Scene {
     this.cfg.tick?.(this, dt);
     if (!this.busy) this.phone.flushQueue();
     this.phone.flushBanners();
-    if (this.busy || this.notebook.open || this.pc.open || this.phone.open) return;
+    // Голодный обморок — после того, как закончится текущая сцена
+    if (state.flags.nd_dead && !this.busy && !this.leaving) return this.gameOver(state.flags.nd_dead);
+    if (this.busy || this.notebook.open || this.pc.open || this.phone.open) {
+      this.prompt.setVisible(false);
+      this.lastPrompt = null;
+      return;
+    }
 
     const k = this.keys;
     const left = k.left.isDown || k.a.isDown || this.touch.left;
@@ -360,7 +423,7 @@ export class LocationScene extends Phaser.Scene {
       });
     }
     if (dir && !this.turning) {
-      const speed = this.sneaking ? SNEAK_SPEED : SPEED;
+      const speed = (this.sneaking ? SNEAK_SPEED : SPEED) * walkFactor();
       this.player.x = Phaser.Math.Clamp(this.player.x + dir * speed * (dt / 1000), 40, this.cfg.width - 40);
       this.player.setFlipX(dir < 0);
       walk(this.player, this.sneaking);
@@ -385,7 +448,8 @@ export class LocationScene extends Phaser.Scene {
       const top = it.npc ? it.npc.y - it.npc.displayHeight * 0.8 - 14 : FLOOR - 160;
       this.prompt.setVisible(true);
       this.prompt.x = it.x - 14;
-      this.prompt.y = it.y ?? top;
+      // Подсказка слегка покачивается
+      this.prompt.y = (it.y ?? top) + Math.sin(time / 160) * 2;
       this.promptLabel.setText(it.label);
       this.promptBg.setSize(this.promptLabel.width + 18, 28);
       const cam = this.cameras.main;
@@ -790,10 +854,16 @@ export class LocationScene extends Phaser.Scene {
     this.infoBg = new Panel(this, 0, 0, 240, 52, { accent: 0x3df0ff, alpha: 0.88 });
     this.dayText = this.add.text(12, 9, '', { fontFamily: '"Press Start 2P"', fontSize: '10px', color: '#3df0ff' });
     this.cashText = this.add.text(12, 28, '', { fontFamily: '"PT Mono", monospace', fontSize: '17px', color: '#ffffff' });
-    // Энергия (Эпизод 2): тонкая полоска под деньгами
-    this.energyBg = this.add.rectangle(12, 50, 120, 5, 0x2a2838).setOrigin(0);
-    this.energyFill = this.add.rectangle(12, 50, 120, 5, 0x8ae6a0).setOrigin(0);
-    this.info.add([...this.infoBg.objects, this.dayText, this.cashText, this.energyBg, this.energyFill]);
+    this.info.add([...this.infoBg.objects, this.dayText, this.cashText]);
+    // Самочувствие: силы (Эп.2), сытость, чистота — значок и полоска под деньгами
+    needIcons(this);
+    this.needBars = ['energy', 'food', 'clean'].map((id) => {
+      const icon = this.add.image(0, 59, `need_${id}`).setOrigin(0, 0.5).setScale(2);
+      const bg = this.add.rectangle(0, 59, NEED_W, 6, 0x2a2838).setOrigin(0, 0.5);
+      const fill = this.add.rectangle(0, 59, NEED_W, 6, 0x8ae6a0).setOrigin(0, 0.5);
+      this.info.add([icon, bg, fill]);
+      return { id, icon, bg, fill };
+    });
     const btn = (this.hud = uiContainer(this, 892, 34, 960));
     const bgPanel = new Panel(this, -50, -22, 100, 44, { accent: 0xffd166, alpha: 0.88 });
     const bg = this.add.rectangle(0, 0, 100, 44, 0x000000, 0.001);
@@ -822,7 +892,7 @@ export class LocationScene extends Phaser.Scene {
     this.refreshPhoneBadge();
 
     // Палево (курьер Рея, Эп. 2)
-    const hb = (this.heatBar = uiContainer(this, 20, 84, 960));
+    const hb = (this.heatBar = uiContainer(this, 20, 100, 960));
     hb.add(this.add.rectangle(0, 0, 150, 26, 0x0c0a16, 0.85).setOrigin(0).setStrokeStyle(2, 0xff6b6b));
     hb.add(this.add.text(8, 7, 'ПАЛЕВО', { fontFamily: '"Press Start 2P"', fontSize: '8px', color: '#ff6b6b' }));
     hb.add(this.add.rectangle(66, 8, 76, 10, 0x2a1a1a).setOrigin(0));
@@ -872,13 +942,53 @@ export class LocationScene extends Phaser.Scene {
     this.infoBg.setSize(Math.max(200, this.dayText.width + 24, this.cashText.width + 24), 52);
     this.heatFill?.setSize(Math.max(1, 76 * Math.min(1, state.heat / 100)), 10);
     const ep2 = state.episode === 'ep2';
-    this.energyBg.setVisible(ep2);
-    this.energyFill.setVisible(ep2);
-    if (ep2) {
-      const e = Math.max(0, Math.min(100, state.energy));
-      this.energyFill.setSize(Math.max(1, 1.2 * e), 5).setFillStyle(e < 25 ? 0xff6b6b : e < 50 ? 0xffd166 : 0x8ae6a0);
-      this.infoBg.setSize(this.infoBg.width, 60);
-    }
+    // Полоски: в Эп.1 — сытость и чистота, в Эп.2 — ещё и силы
+    const shown = this.needBars.filter((b) => (b.id === 'energy' ? ep2 : needsOn()));
+    this.needBars.forEach((b) => [b.icon, b.bg, b.fill].forEach((o) => o.setVisible(shown.includes(b))));
+    const COLORS = {
+      energy: (v) => (v < 25 ? 0xff6b6b : v < 50 ? 0xffd166 : 0x8ae6a0),
+      food: (v) => (v < FOOD_WEAK ? 0xff3d3d : v < FOOD_LOW ? 0xffb060 : 0xf0c060),
+      clean: (v) => (v < CLEAN_BAD ? 0x8a6a3a : v < CLEAN_LOW ? 0xb8a070 : 0x6ad8ff),
+    };
+    shown.forEach((b, i) => {
+      const v = Math.max(0, Math.min(100, Math.round(b.id === 'energy' ? state.energy : b.id === 'food' ? state.food : state.clean)));
+      const x = 12 + i * (NEED_W + 26);
+      b.icon.setX(x);
+      b.bg.setX(x + 18);
+      b.fill.setX(x + 18).setSize(Math.max(1, (NEED_W * v) / 100), 6).setFillStyle(COLORS[b.id](v));
+      // Мало — значок мигает
+      const low = b.id === 'energy' ? v < 25 : b.id === 'food' ? v < FOOD_LOW : v < CLEAN_LOW;
+      if (low && !b.blink) b.blink = this.tweens.add({ targets: b.icon, alpha: 0.25, duration: 420, yoyo: true, repeat: -1 });
+      if (!low && b.blink) {
+        b.blink.remove();
+        b.blink = null;
+        b.icon.setAlpha(1);
+      }
+    });
+    if (shown.length) this.infoBg.setSize(Math.max(this.infoBg.width, 12 + shown.length * (NEED_W + 26)), 70);
+  }
+
+  // Полоска чуть подпрыгивает, когда поел или помылся
+  bumpNeed(id) {
+    const b = this.needBars?.find((n) => n.id === id);
+    if (!b || !b.icon.visible) return;
+    this.tweens.add({ targets: b.icon, scale: 2.8, duration: 120, yoyo: true });
+    sfx(id === 'food' ? 'select' : 'line');
+  }
+
+  // «Конец»: голодный обморок
+  gameOver(reason) {
+    if (this.leaving) return;
+    this.leaving = true;
+    this.busy = true;
+    delete state.flags.nd_dead;
+    this.player.setOrigin(0.5, 0.62).setAngle(this.player.flipX ? 90 : -90).setY(FLOOR - 24);
+    this.cameras.main.shake(400, 0.006);
+    this.cameras.main.fadeOut(1600, 7, 6, 13);
+    this.cameras.main.once('camerafadeoutcomplete', () => {
+      stopAmbience();
+      this.scene.start('Over', { reason });
+    });
   }
 
   addCash(delta, label) {
@@ -989,6 +1099,13 @@ export class LocationScene extends Phaser.Scene {
   }
 
   showToast(title, text, color = '#ffd166') {
+    // Пока висит предыдущая плашка — новая ждёт очереди (одинаковые не дублируем)
+    if (this.time.now < (this.toastUntil || 0)) {
+      this.toastQueue = (this.toastQueue || []).filter((q) => q[0] !== title);
+      if (this.toastQueue.length < 4) this.toastQueue.push([title, text, color]);
+      return;
+    }
+    this.toastUntil = this.time.now + 3300;
     this.toastTitle.setText(title).setColor(color);
     this.toastText.setText(text);
     const tw = Math.max(420, this.toastText.width + 60);
@@ -997,7 +1114,14 @@ export class LocationScene extends Phaser.Scene {
     this.toastBg.setSize(tw, 66);
     this.tweens.killTweensOf(this.toast);
     this.toast.y = 620;
-    this.tweens.add({ targets: this.toast, y: 496, duration: 350, ease: 'Back.out', hold: 2600, yoyo: true });
+    this.tweens.add({
+      targets: this.toast, y: 496, duration: 350, ease: 'Back.out', hold: 2600, yoyo: true,
+      onComplete: () => {
+        this.toastUntil = 0;
+        const next = this.toastQueue?.shift();
+        if (next) this.showToast(...next);
+      },
+    });
   }
 
   // Погода по умолчанию: пыль в тёмных помещениях, туман у воды и на промзоне ночью

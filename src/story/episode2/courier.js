@@ -1,7 +1,7 @@
 // Рей во втором эпизоде: долг, флаеры, менеджер — и «Курьер Рея» (задание 1).
 // Торговля без подробностей: «пакеты» и «марочки» Рея. Шкала «Палево», покупатели, переодетые полицейские, облава.
 import { voiced } from '../../voice.js';
-import { F, state, giveItem, takeItem, pulse, now, at, day, addFollowers, feed, quest, questStatus, receive, rel, relOf, once, weighted, pickOne } from './common.js';
+import { F, state, giveItem, takeItem, pulse, now, at, day, addFollowers, feed, quest, questStatus, receive, rel, relOf, once, weighted, pickOne, clean } from './common.js';
 import { randomSpec, personTexture } from './people.js';
 import { nextDay } from './world.js';
 import { rayServiceOffer } from './girls.js';
@@ -284,6 +284,8 @@ export async function afterChase(ctx) {
   const { d } = ctx;
   const res = F.e2ChaseResult;
   F.e2ChaseResult = null;
+  // Заборы, лужи, гаражи — после погони весь в грязи
+  clean(-25);
   if (res === 'escaped') {
     state.heat = 30;
     if (F.e2DumpedPacks) {

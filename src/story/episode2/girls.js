@@ -2,7 +2,7 @@
 // Ночные сцены, свидания (одно в день), знакомство с мамой со случайной реакцией, ночной город.
 import { voiced } from '../../voice.js';
 import { addContact } from '../../phone/model.js';
-import { F, state, pulse, energy, now, at, day, addFollowers, feed, quest, questStatus, rel, relOf, once, weighted, hasItem, takeItem } from './common.js';
+import { F, state, pulse, energy, now, at, day, addFollowers, faceFollowers, feed, quest, questStatus, rel, relOf, once, weighted, hasItem, takeItem } from './common.js';
 import { mood } from './world.js';
 import { addActor } from '../../gfx/actors.js';
 import { castKey } from './people.js';
@@ -47,9 +47,7 @@ export async function kiraTalk(ctx) {
   if (pick === 'eat') {
     if (state.cash < 250) return d.think('Денег нет. Даже на трупик.');
     ctx.cash(-250, 'шаурма');
-    d.close();
-    await ctx.anim('eat', 1600);
-    energy(30);
+    await ctx.eat(50, { ms: 1600, energy: 30 });
     ctx.time(20);
     return d.think('Горячо, остро, жирно. Ровно то, что надо.');
   }
@@ -207,7 +205,7 @@ export async function miraRooftop(ctx) {
   } else if (c === 1) {
     rel('mira', 1);
     sfx('shutter');
-    addFollowers('kadr', 40, 'фото Миры с крыши');
+    faceFollowers('kadr', 40, 'фото Миры с крыши');
     await d.say('Мира', 'Стой. Не позируй. Просто смотри на город. Вот. Это ты.');
   } else if (relOf('mira') >= 2) {
     rel('mira', 2);

@@ -10,6 +10,7 @@ import { BATHROOM } from './shared.js';
 import { posterView } from './prologue.js';
 import { BEAT, playMusic, stopMusic, sfx } from '../audio.js';
 import { addActor } from '../gfx/actors.js';
+import { drainPhase, food, clean } from '../needs.js';
 
 const F = state.flags;
 const FLOOR = 470;
@@ -28,6 +29,8 @@ export const PHASES = {
 const phase = () => F.e1;
 // Марочка действует несколько часов: текущая фаза и следующая, сон обрывает сразу
 const setPhase = (p) => {
+  // Между фазами проходят часы: голод и грязь копятся (на старте эпизода — нет)
+  if (F.e1 && F.e1 !== p) drainPhase();
   F.e1 = p;
   if (F.acidNow && --F.acidLeft <= 0) endAcid();
 };
@@ -103,6 +106,9 @@ const YARD_PHOTOS = [
 export function startEpisode1() {
   state.episode = 'ep1';
   setPhase('tue');
+  state.food = 75;
+  state.clean = 70;
+  state.starve = 0;
   state.cash = 500;
   state.goal = '';
   F.shifts = 0;
@@ -389,10 +395,19 @@ export const LOCATIONS = {
       },
       {
         x: 872, label: 'Холодильник', sfx: 'fridge',
-        async use({ d, fx }) {
+        async use(ctx) {
+          const { d, fx } = ctx;
           fx.flash(872, 380, 84, 180, 0xbfe8ff, 0.7, 900);
-          if (isDay()) return d.think('На дверце записка: «Ушла на смены. Поешь. Не грусти. М.» Рядом — магнит «Анапа 2009».');
-          await d.think('Холодильник гудит в темноте, как маленький трансформатор.');
+          // Мама оставляет еду: раз за фазу можно поесть
+          const fed = !F[`fridge_${phase()}`];
+          if (isDay()) await d.think('На дверце записка: «Ушла на смены. Поешь. Не грусти. М.» Рядом — магнит «Анапа 2009».');
+          else await d.think('Холодильник гудит в темноте, как маленький трансформатор.');
+          if (!fed) return d.think('Всё, что было, я уже съел. Остался кетчуп и надежда.');
+          const c = await d.choose([isDay() ? '[Поесть: макароны по-флотски]' : '[Поесть: холодная гречка с котлетой]', '[Закрыть]']);
+          if (c === 1) return;
+          F[`fridge_${phase()}`] = true;
+          await ctx.eat(45);
+          await d.think(isDay() ? 'Макароны по-флотски. Мама — гений экономики.' : 'Ем холодную гречку прямо из кастрюли. Вкус детства и одиночества.');
         },
       },
       {
@@ -1043,6 +1058,10 @@ async function afterShift({ d, npc, walk, wait, cash, line, goal, card, go, fx, 
   F.shiftResult = null;
   F.shiftInProgress = false;
   F.shifts = (F.shifts || 0) + 1;
+  // Смена на складе: обед из столовой, но пыль и пот до костей
+  food(25);
+  clean(-35);
+  scene.refreshHud?.();
   if (phase() === 'wed') F.workedWed = true;
   if (phase() === 'thu') F.workedThu = true;
   if (r.hits >= Math.ceil(r.total * 0.8)) F.goodRhythm = true;

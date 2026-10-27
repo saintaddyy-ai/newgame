@@ -6,6 +6,7 @@ import { EVENTS, checkEvents, passOut, startEpisode2 } from './main.js';
 import { REPLIES as SIDE_REPLIES, callScript as sideCall } from './side.js';
 import { coolHeat } from './courier.js';
 import { mapInfo as metroMap } from './metro.js';
+import { drainMinutes, tireFactor, checkNeeds, clean } from '../../needs.js';
 
 export { LOCATIONS, startEpisode2, EVENTS };
 
@@ -19,7 +20,9 @@ export function clockLabel() {
 export function advanceTime(scene, min) {
   if (!min) return;
   state.time.min += min;
-  energy(-min / 14);
+  energy((-min / 14) * tireFactor());
+  drainMinutes(min);
+  checkNeeds(scene);
   coolHeat(min);
   checkEvents(scene);
   scene.refreshHud?.();
@@ -56,6 +59,9 @@ export const ITEM_USE = {
 export function sceneHooks(scene) {
   // Палево видно, пока работаешь на Рея; при смене места оно чуть остывает
   if (state.flags.courierActive) coolHeat(30);
+  // Дождь на улице — чуть грязнее (мокрые кроссы, брызги от машин)
+  const rainy = typeof scene.cfg.rain === 'function' ? scene.cfg.rain() : scene.cfg.rain;
+  if (rainy) clean(-3);
   // Энергия на нуле — Марк еле идёт
   if (state.energy < 15 && !state.flags[`e2Tired_${day()}`]) {
     state.flags[`e2Tired_${day()}`] = true;

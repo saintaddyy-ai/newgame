@@ -3,7 +3,7 @@ import { voiced } from '../../voice.js';
 import { addContact } from '../../phone/model.js';
 import {
   F, state, hasItem, takeItem, giveItem, pulse, energy, now, at, day, addFollowers, feed, quest, questStatus, receive,
-  rel, relOf, once, pickOne,
+  rel, relOf, once, pickOne, clean,
 } from './common.js';
 import { mood, byMood, nextDay, isNight, studioOccupant, whereIs, initialPulse, pulseLevel } from './world.js';
 import { rayMenu } from './courier.js';
@@ -15,6 +15,10 @@ export function startEpisode2() {
   state.time.day = 'fri';
   state.time.min = at(10);
   state.energy = 90;
+  // Утром мама накормила; помыться — на совести игрока
+  state.food = Math.max(state.food ?? 0, 70);
+  state.clean = Math.min(Math.max(state.clean ?? 0, 55), 70);
+  state.starve = 0;
   state.pulse = initialPulse();
   F.e2Seed = Math.floor(Math.random() * 1000);
   F.e2Started = true;
@@ -189,6 +193,8 @@ export async function sleepHere(ctx, place = 'home') {
   F.e2SleptAt = place;
   if (place === 'home' && !momIsHome()) F.e2MomAlone = false;
   if (place !== 'home') F.e2NightsOut = (F.e2NightsOut || 0) + 1;
+  // Ночь не дома — на диване в гараже или где придётся: помятый
+  if (place !== 'home') clean(-8);
   await d.think(pickOne(['Потолок. Строчки. Потолок.', 'Засыпаю под гул холодильника.', 'Город за окном шумит, как бит, который ещё не записан.']));
   d.close();
   await ctx.lieDown();
@@ -211,6 +217,7 @@ export async function passOut(scene) {
   if (day() === 'sun') return endSunday(ctx, F.e2SleptAt);
   nextDay();
   state.time.min = at(11, 30);
+  if (F.e2SleptAt !== 'home') clean(F.e2SleptAt === 'street' ? -15 : -8);
   if (F.e2SleptAt === 'street') {
     rel('mom', -1);
     pulse(-3);
@@ -257,7 +264,8 @@ export async function momTalk2(ctx) {
   const c = await d.choose(opts.map((o) => o[1]));
   const pick = opts[c][0];
   if (pick === 'eat') {
-    energy(25);
+    if (state.food >= 90) return d.say('Мама', 'Ты же только что ел! Иди уж, растолстеешь — на сцену не влезешь.');
+    await ctx.eat(45, { ms: 1600, energy: 25 });
     ctx.time(20);
     await d.think('Гречка с котлетой. Мир сразу становится чуть терпимее.');
   } else if (pick === 'father') {

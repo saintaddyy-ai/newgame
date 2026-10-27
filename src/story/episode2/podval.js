@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import { voiced } from '../../voice.js';
 import { BEAT, playMusic, stopMusic } from '../../audio.js';
 import { addContact } from '../../phone/model.js';
-import { F, state, hasItem, takeItem, pulse, now, at, day, addFollowers, feed, quest, rel, relOf, once, post } from './common.js';
+import { F, state, hasItem, takeItem, pulse, now, at, day, addFollowers, faceFollowers, feed, quest, rel, relOf, once, post, clean, remark } from './common.js';
 import { addActor } from '../../gfx/actors.js';
 
 const FLOOR = 470;
@@ -94,6 +94,12 @@ export async function bulldogTalk(ctx) {
     return d.say('Бульдог', 'Рано. В семь. Ты кто вообще? …А, вопросительный знак. Ну, жди, вопросительный.');
   }
   await d.say('Бульдог', F.e2BulldogMet ? 'Проходи, вопросительный.' : 'Имя? …Тень. Ты в списке. Вопросительным знаком. Проходи. И без глупостей.');
+  // Охрана тоже чувствует, когда от тебя пахнет
+  const smell = remark('bulldog');
+  if (smell) {
+    await d.say('Бульдог', smell);
+    pulse(-1);
+  }
   F.e2BulldogMet = true;
   F.e2InPodval = true;
   go('podval', 120);
@@ -340,11 +346,13 @@ async function afterMark(ctx) {
   // Вечер в «Подвале» идёт своим ходом: три номера до тебя и twinspeak после
   if (now() < at(22, 30)) ctx.time(at(22, 30) - now());
   const r = F.podvalResult;
+  // Софиты, толпа, три минуты на пределе — мокрый насквозь
+  clean(-20);
   if (r === 'fire') {
     pulse(10);
     state.stats.fame += 3;
-    addFollowers('ritm', 160, 'видео из «Подвала»');
-    addFollowers('kadr', 70, 'фото из «Подвала»');
+    faceFollowers('ritm', 160, 'видео из «Подвала»');
+    faceFollowers('kadr', 70, 'фото из «Подвала»');
     await d.think('Зал орёт. Я не слышу собственного сердца. Только «ТЕНЬ! ТЕНЬ!» — как будто это не имя, а приказ.');
   } else if (r === 'ok') {
     pulse(4);

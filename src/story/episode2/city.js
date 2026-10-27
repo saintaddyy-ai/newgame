@@ -1,6 +1,6 @@
 // Город: кафе и их работники, туалеты, драки посетителей, барбершоп, тату, одежда, прохожие и фанаты.
 import { voiced } from '../../voice.js';
-import { F, state, pulse, energy, now, day, addFollowers, feed, once, pickOne, weighted, markLook } from './common.js';
+import { F, state, pulse, energy, now, day, addFollowers, faceFollowers, feed, once, pickOne, weighted, markLook, clean } from './common.js';
 import { workerHello, workerMood } from './workers.js';
 import { randomSpec, personTexture } from './people.js';
 import { repaintMark, OUTFITS } from './look.js';
@@ -8,10 +8,11 @@ import { addActor, walk as actorWalk } from '../../gfx/actors.js';
 
 // ---------- Работники кафе ----------
 
+// [название, цена, энергия, сытость]
 const MENUS = {
-  zerno: [['Американо', 150, 15], ['Капучино с котиком', 220, 18], ['Круассан', 180, 22]],
-  pyshka: [['Пышки, три штуки', 120, 22], ['Чай из бака', 50, 8], ['Пышки, десять штук', 350, 40]],
-  noch: [['Безалкогольный с зонтиком', 300, 10], ['Коктейль «Подвал»', 450, 5], ['Бургер', 400, 30]],
+  zerno: [['Американо', 150, 15, 3], ['Капучино с котиком', 220, 18, 8], ['Круассан', 180, 22, 25]],
+  pyshka: [['Пышки, три штуки', 120, 22, 25], ['Чай из бака', 50, 8, 3], ['Пышки, десять штук', 350, 40, 60]],
+  noch: [['Безалкогольный с зонтиком', 300, 10, 4], ['Коктейль «Подвал»', 450, 5, 2], ['Бургер', 400, 30, 55]],
 };
 
 export async function workerTalk(ctx, w) {
@@ -30,9 +31,7 @@ export async function workerTalk(ctx, w) {
     if (state.cash < item[1]) return d.say(w.name, m <= -1 ? 'Денег нет? До свидания.' : 'Не хватает… Ну, в другой раз.');
     ctx.cash(-item[1], item[0]);
     // Ест или пьёт тут же, у стойки
-    d.close();
-    await ctx.anim('eat', 1400);
-    energy(item[2]);
+    await ctx.eat(item[3], { energy: item[2] });
     ctx.time(15);
     if (item[0] === 'Коктейль «Подвал»') pulse(-1);
     return d.think(pickOne(['Горячее, сладкое — то, что надо.', 'Вкусно. Даже слишком для этого района.', 'Сижу у окна. Город за стеклом идёт мимо, как клип без звука.']));
@@ -63,7 +62,7 @@ export async function visitorTalk(ctx) {
     const c = await d.choose(['[Сфоткаться]', '«Не сейчас.»']);
     if (c === 0) {
       ctx.sfx('shutter');
-      addFollowers('kadr', 12, 'сторис с фанатом');
+      faceFollowers('kadr', 12, 'сторис с фанатом');
       pulse(1);
       return d.say('Посетитель', 'Аааа! Спасибо! Я всем покажу!');
     }
@@ -98,6 +97,7 @@ export async function cafeFight(ctx) {
     if (Math.random() < 0.4) {
       sfx('punch');
       energy(-15);
+      clean(-8);
       fx.shake(250, 0.012);
       await d.think('Прилетает в плечо. Не мне предназначалось, но досталось мне. Зато они остыли.');
     } else {

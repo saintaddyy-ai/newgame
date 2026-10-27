@@ -9,6 +9,7 @@ import { EndScene } from './scenes/EndScene.js';
 import { WarehouseScene } from './scenes/WarehouseScene.js';
 import { StageScene } from './scenes/StageScene.js';
 import { ChaseScene } from './scenes/ChaseScene.js';
+import { OverScene } from './scenes/OverScene.js';
 import { state } from './state.js';
 import { audioCtx } from './audio.js';
 import { AberrationFX } from './gfx/fx.js';
@@ -50,6 +51,6 @@ loadFonts().then(() => {
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
     input: { activePointers: 3 },
     pipeline: { AberrationFX },
-    scene: [BootScene, TitleScene, LocationScene, StudioScene, EndScene, WarehouseScene, StageScene, ChaseScene],
+    scene: [BootScene, TitleScene, LocationScene, StudioScene, EndScene, WarehouseScene, StageScene, ChaseScene, OverScene],
   });
 });

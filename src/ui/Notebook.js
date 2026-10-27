@@ -4,6 +4,7 @@ import { sfx } from '../audio.js';
 import { uiContainer } from './pin.js';
 import { Pix } from '../gfx/pix.js';
 import { rng, mix } from '../gfx/color.js';
+import { needsOn, FOOD_LOW, CLEAN_LOW } from '../needs.js';
 
 // Вещи, которые можно использовать прямо из тетради
 export const USABLE = { marka: 'съесть' };
@@ -105,6 +106,16 @@ export class Notebook {
     const s = this.scene;
     const shade = this.page('ТЕТРАДЬ');
     shade.on('pointerdown', () => this.hide());
+    // Самочувствие — карандашом в углу листа
+    if (needsOn()) {
+      const parts = [
+        state.episode === 'ep2' && `силы ${Math.round(state.energy)}`,
+        `сытость ${Math.round(state.food)}${state.food < FOOD_LOW ? ' — поесть!' : ''}`,
+        `чистота ${Math.round(state.clean)}${state.clean < CLEAN_LOW ? ' — помыться!' : ''}`,
+      ].filter(Boolean);
+      const low = state.food < FOOD_LOW || state.clean < CLEAN_LOW;
+      this.root.add(s.add.text(812, 70, parts.join(' · '), { fontFamily: FONT, fontSize: '13px', color: low ? '#c03a5a' : '#5a5070', fontStyle: 'italic' }).setOrigin(1, 0));
+    }
     let y = 92;
     if (state.goal) {
       this.root.add(s.add.text(ROW_X, y, `ЦЕЛЬ: ${state.goal}`, { fontFamily: FONT, fontSize: '17px', color: '#c03a5a', fontStyle: 'bold', wordWrap: { width: 590 } }));

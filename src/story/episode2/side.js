@@ -1,5 +1,5 @@
 // Независимые задания Эпизода 2 (раздел 7 сценария) и ответы на сообщения в телефоне.
-import { F, state, hasItem, giveItem, takeItem, pulse, energy, now, at, day, addFollowers, feed, quest, questStatus, receive, rel, relOf, once, later, hasDemo, post } from './common.js';
+import { F, state, hasItem, giveItem, takeItem, pulse, energy, now, at, day, addFollowers, faceFollowers, feed, quest, questStatus, receive, rel, relOf, once, later, hasDemo, post } from './common.js';
 import { mood, whereIs, PLACE_NAMES } from './world.js';
 
 // ---------- 3. Обложка с Аркашей: три фото на телефон ----------
@@ -43,7 +43,7 @@ export async function stasCafe(ctx) {
   }
   if (F.e2StreamResult && once('stream_after')) {
     const r = F.e2StreamResult;
-    addFollowers('ritm', r === 'fire' ? 220 : r === 'ok' ? 90 : 20, 'стрим из «Зерна»');
+    faceFollowers('ritm', r === 'fire' ? 220 : r === 'ok' ? 90 : 20, 'стрим из «Зерна»');
     state.stats.fame += r === 'fail' ? 0 : 1;
     quest('e2_stream', { status: 'done', title: 'Стрим у Стаса' });
     return d.say('Стас', r === 'fire' ? 'Девяносто восемь процентов досмотров. Это рекорд. Рекорд — это я сказал, а я не преувеличиваю.' : r === 'ok' ? 'Нормально. Шестьдесят процентов. Для первого раза — сто процентов нормально.' : 'Двенадцать процентов досмотров. Бывает. Звук был хороший. Звук не виноват.');

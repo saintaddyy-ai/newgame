@@ -1,5 +1,8 @@
 // Локации, общие для всех эпизодов
 import { drawBathroom } from './backdrops.js';
+import { state } from '../state.js';
+
+const pickOne = (a) => a[Math.floor(Math.random() * a.length)];
 
 // Ванная — отдельная комната, вход из прихожей
 export const BATHROOM = {
@@ -51,6 +54,20 @@ export const BATHROOM = {
       async use({ d, fx }) {
         fx.burst(630, 230, { color: 0xff9ab8, count: 8, tex: 'spark', speed: 60, gravity: 50 });
         await d.think('Один крем на всё. Для лица, для рук, для жизни. «Детский», за девяносто рублей.');
+      },
+    },
+    {
+      x: 712, label: 'Ванна — помыться', sfx: 'water',
+      async use(ctx) {
+        const { d } = ctx;
+        if (state.episode === 'prologue') return d.think('Ванна с отбитой эмалью. Мыться буду потом. Сначала — бит.');
+        if (state.clean >= 92) return d.think('Я и так чистый. Мама скажет — воду экономь.');
+        const c = await d.choose([state.episode === 'ep2' ? '[Помыться — полчаса]' : '[Помыться]', '[Не сейчас]']);
+        if (c === 1) return;
+        await d.think(pickOne(['Колонка щёлкает, вода то кипяток, то лёд. Классика.', 'Шампунь «2 в 1». Мама говорит, что это экономия. Я говорю — это минимализм.', 'Под душем лучше всего пишется. Жаль, листок намок.']));
+        await ctx.wash(100);
+        ctx.time(30);
+        await d.think('Чистый. Почти новый человек. Почти.');
       },
     },
     {

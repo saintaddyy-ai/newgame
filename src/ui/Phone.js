@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { QUALITY_LABEL } from '../gfx/quality.js';
 import { applyLook } from '../gfx/fx.js';
+import { needsOn, needsTodo, FOOD_LOW, CLEAN_LOW } from '../needs.js';
 import { state, clockShort, saveSettings, DAYS } from '../state.js';
 import { sfx, setVolumes, audioCtx, decodeBlob, playBuffer } from '../audio.js';
 import { voiceSettings } from '../voice.js';
@@ -420,13 +421,33 @@ export class Phone {
     y += 14;
     const goal = this.text(10, y, state.goal || 'Пока ничего — просто живи.', { fontSize: '13px', color: '#ffffff', wordWrap: { width: SW - 20 } });
     y += goal.height + 12;
+    // Самочувствие: силы (Эп.2), сытость, чистота
+    if (needsOn() && !this.offset) {
+      this.text(10, y, 'САМОЧУВСТВИЕ', { fontFamily: PIXEL, fontSize: '8px', color: '#6ad8ff' });
+      y += 14;
+      const bars = [
+        state.episode === 'ep2' && ['Силы', state.energy, state.energy < 25 ? 0xff6b6b : 0x8ae6a0],
+        ['Сытость', state.food, state.food < FOOD_LOW ? 0xff6b6b : 0xf0c060],
+        ['Чистота', state.clean, state.clean < CLEAN_LOW ? 0xb8a070 : 0x6ad8ff],
+      ].filter(Boolean);
+      const bw = Math.floor((SW - 20 - (bars.length - 1) * 8) / bars.length);
+      bars.forEach(([label, v, c], i) => {
+        const x = 10 + i * (bw + 8);
+        this.text(x, y, `${label} ${Math.round(v)}`, { fontSize: '10px', color: '#c9c4ee' });
+        this.rect(x, y + 14, bw, 5, 0x2a2838);
+        this.rect(x, y + 14, Math.max(1, (bw * Math.max(0, Math.min(100, v))) / 100), 5, c);
+      });
+      y += 28;
+    }
     const qs = Object.entries(state.quests);
+    // «Поесть» / «Помыться» — живые дела, появляются, когда пора
+    const needs = needsTodo().map((n, i) => [`need_${i}`, { title: n.title, note: n.note, status: 'active', urgent: n.urgent }]);
     const groups = [
-      ['ДЕЛА', qs.filter(([, q]) => q.status === 'active'), '#8ae6a0'],
+      ['ДЕЛА', [...needs, ...qs.filter(([, q]) => q.status === 'active')], '#8ae6a0'],
       ['СДЕЛАНО', qs.filter(([, q]) => q.status === 'done'), '#77729a'],
       ['ПРОВАЛЕНО', qs.filter(([, q]) => q.status === 'failed'), '#ff6b8a'],
     ];
-    if (!qs.length) this.text(10, y, 'Независимых дел нет.\nЛюди дают их сами — разговаривай.', { fontSize: '12px', color: '#77729a' });
+    if (!qs.length && !needs.length) this.text(10, y, 'Независимых дел нет.\nЛюди дают их сами — разговаривай.', { fontSize: '12px', color: '#77729a' });
     const all = [];
     groups.forEach(([title, list, color]) => list.length && all.push({ title, color }, ...list.map(([id, q]) => ({ q, color }))));
     const start = this.offset || 0;
@@ -437,7 +458,7 @@ export class Phone {
         y += 14;
         return;
       }
-      const t = this.text(16, y, `• ${it.q.title}`, { fontSize: '13px', color: it.q.status === 'active' ? '#ffffff' : '#77729a', wordWrap: { width: SW - 30 } });
+      const t = this.text(16, y, `• ${it.q.title}`, { fontSize: '13px', color: it.q.urgent ? '#ff6b8a' : it.q.status === 'active' ? '#ffffff' : '#77729a', wordWrap: { width: SW - 30 } });
       y += t.height + 2;
       if (it.q.note && it.q.status === 'active') {
         const n = this.text(26, y, it.q.note, { fontSize: '11px', color: '#a9a6c8', wordWrap: { width: SW - 40 } });

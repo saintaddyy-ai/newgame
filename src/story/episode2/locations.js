@@ -57,11 +57,17 @@ const apartment = {
     { x: 480, label: 'Окно', sfx: 'whoosh', async use({ d }) {
       await d.think(isNight() ? 'Ночь. Три окна в доме напротив. В одном кто-то тоже не спит.' : day() === 'sun' ? 'Воскресенье. Даже голуби ходят медленнее.' : 'Город. Где-то там — «Подвал», Рей, кафе, люди. Все чего-то хотят.');
     } },
-    { x: 872, label: 'Холодильник', sfx: 'fridge', cost: 15, async use({ d, fx }) {
+    { x: 872, label: 'Холодильник', sfx: 'fridge', cost: 15, async use(ctx) {
+      const { d, fx } = ctx;
       fx.flash(872, 380, 84, 180, 0xbfe8ff, 0.7, 900);
       if (once(`fridge_${day()}`)) {
-        state.energy = Math.min(100, state.energy + 15);
-        return d.think('Гречка, котлета, мамин компот. Съел стоя, как в детстве.');
+        await d.think('Гречка, котлета, мамин компот.');
+        await ctx.eat(40, { energy: 15 });
+        return d.think('Съел стоя, как в детстве.');
+      }
+      if (state.food < 50 && once(`fridge2_${day()}`)) {
+        await d.think('В глубине — банка огурцов и полбатона. Сойдёт.');
+        return ctx.eat(15);
       }
       return d.think('Пусто. Я всё съел. Холодильник гудит с укором.');
     } },
@@ -211,6 +217,13 @@ const garage_wc = {
   lamps: [{ x: 300, y: 72, r: 110, color: 0xffe8a8, alpha: 0.4 }],
   items: [
     { x: 380, label: 'Унитаз и стены', sfx: 'flush', cost: 10, use: M.garageWc },
+    { x: 150, label: 'Раковина — помыться', sfx: 'water', pose: 'wash', cost: 20, async use(ctx) {
+      const { d } = ctx;
+      if (state.clean >= 90) return d.think('Я и так чистый. Почти скриплю.');
+      await d.think('Ледяная вода, кусок хозяйственного мыла и полотенце с надписью «ДЭН. НЕ ТРОГАТЬ».');
+      await ctx.wash(45, { full: false });
+      return d.think(state.clean >= 70 ? 'Жить можно. Пахну гаражом, но уже чистым гаражом.' : 'Лучше, чем было. До душа далеко.');
+    } },
     { x: 60, label: 'Обратно в гараж', sfx: 'click', async use({ go }) {
       go('garage', 370);
     } },
@@ -233,7 +246,7 @@ const crossroads = {
       { x: 220, w: 320, h: 330, color: 0x3a2e48, shop: true, sign: 'ОПАСНАЯ БРИТВА', signColor: '#ff3d8a' },
       { x: 560, w: 380, h: 300, color: 0x2e3a48, shop: true, sign: 'ШАУРМА 24', signColor: '#ffd166', awning: 0xc0303a },
       { x: 960, w: 320, h: 360, color: 0x2a2236 },
-      { x: 1700, w: 380, h: 320, color: 0x3a3440 },
+      { x: 1580, w: 360, h: 320, color: 0x3a3440, shop: true, sign: 'ПРОДУКТЫ', signColor: '#8ae6a0' },
       { x: 2100, w: 400, h: 340, color: 0x2e2a40 },
     ],
     features: [
@@ -243,7 +256,7 @@ const crossroads = {
       { type: 'neon', x: 1900, y: 236, text: '← КАФЕ-КВАРТАЛ →', color: '#ffd166' },
       { type: 'neon', x: 2300, y: 236, text: 'ТОРГОВАЯ →', color: '#8ae6a0' },
     ],
-    parked: [[1800, 0x3a5a8a, 1], [2180, 0xd8d8d8, -1]],
+    parked: [[2180, 0xd8d8d8, -1]],
   }),
   prepare: (scene) => {
     ['cop', 'vika'].forEach((id) => castKey(scene, id));
@@ -264,6 +277,7 @@ const crossroads = {
     exit(100, 'Во двор (арка)', 'yard', 2515, { cost: 5, facing: 'left' }),
     exit(380, '«Опасная бритва»', 'barber', 900, { cost: 2, open: () => now() >= at(10) && now() < at(21) }),
     exit(760, '«Шаурма 24»', 'shawarma', 980, { cost: 2 }),
+    { x: 1760, label: '«Продукты 24»', sfx: 'click', cost: 5, use: groceries },
     { x: 1120, label: () => (P.podvalOpen() || (day() === 'fri' && now() >= at(18))) ? 'Вниз — в «Подвал»' : '«Подвал»', sfx: 'click', async use(ctx) {
       ctx.time(2);
       ctx.go('podval_entrance', 200);
@@ -278,6 +292,22 @@ const crossroads = {
     exit(2300, 'Торговая улица', 'shops', 120, { cost: 5 }),
   ],
 };
+
+// Магазин «Продукты 24»: дёшево и сытно (покупки — через ctx.cash)
+const GROCERY = [['Батон и кефир', 120, 30], ['Доширак (кипяток у кассы)', 90, 25], ['Сырок и банан', 70, 12]];
+
+async function groceries(ctx) {
+  const { d } = ctx;
+  await d.say('Продавщица', pickOne(['Пакет нужен? Пакет — пять рублей.', 'Молодой человек, вы брать будете или смотреть?', 'Кефир свежий, вчерашний. Это свежий.']));
+  const c = await d.choose([...GROCERY.map(([n, p]) => `${n} — ${p} ₽`), '«Ничего, спасибо.»']);
+  if (c === GROCERY.length) return;
+  const [name, price, fill] = GROCERY[c];
+  if (state.cash < price) return d.say('Продавщица', 'Не хватает. Положите обратно, я не банк.');
+  ctx.cash(-price, name);
+  await ctx.eat(fill, { energy: 8 });
+  ctx.time(10);
+  return d.think(pickOne(['Ем прямо у входа. Голуби смотрят с завистью.', 'Дёшево и сердито. Как мой первый бит.', 'Студенческий ужин чемпиона.']));
+}
 
 // ---------- Кафе-квартал ----------
 
@@ -459,8 +489,10 @@ const cafe_wc = {
   }),
   lamps: [{ x: 400, y: 52, r: 120, color: 0xfff0c8, alpha: 0.35 }],
   items: [
-    { x: 250, label: 'Зеркало', sfx: 'mirror', async use({ d }) {
-      await d.think(pickOne(['Умываю лицо. Холодная вода — лучший продюсер.', 'Под глазами синяки. Это образ. Это не образ.']));
+    { x: 250, label: 'Зеркало и раковина', sfx: 'mirror', async use(ctx) {
+      await ctx.d.think(pickOne(['Умываю лицо. Холодная вода — лучший продюсер.', 'Под глазами синяки. Это образ. Это не образ.']));
+      // Умыться в кафе — чуть-чуть свежее (до душа не дотянет)
+      if (state.clean < 50 && once(`cafe_wash_${day()}_${Math.floor(now() / 120)}`)) await ctx.wash(10, { full: false });
     } },
     { x: 560, label: 'Кабинка', sfx: 'flush', cost: 5, use: C.cafeWc },
     { x: 60, label: 'Выйти', sfx: 'doorSoft', async use({ go }) {
@@ -497,6 +529,14 @@ async function timurTalk(ctx) {
     return d.say('Рей', 'Тимур, братик, лаваш — это верх воронки, мясо — середина, соус — конверсия! Это же очевидно!');
   }
   await d.say('Тимур', pickOne(['Шаурма — это как жизнь. Главное — соус.', 'Кира хорошая. Странная, но хорошая. Котов кормит.', 'Ночью тут все честные. Днём — все спешат.']));
+  const c = await d.choose(['Шаурму — 250 ₽', 'Шаурму XL с двойным мясом — 380 ₽', '«Просто зашёл.»']);
+  if (c === 2) return;
+  const price = c === 0 ? 250 : 380;
+  if (state.cash < price) return d.say('Тимур', 'Не хватает, брат. В долг не кручу. Даже тебе.');
+  ctx.cash(-price, c === 0 ? 'шаурма' : 'шаурма XL');
+  await ctx.eat(c === 0 ? 50 : 75, { ms: 1600, energy: c === 0 ? 20 : 30 });
+  ctx.time(20);
+  return d.think(c === 0 ? 'Горячо, остро, жирно. Ровно то, что надо.' : 'Двойное мясо. Я теперь тоже воронка. Сытая воронка.');
 }
 
 // «Шаурма» ночью: ступеньки у входа (выбор ночи — Кира)

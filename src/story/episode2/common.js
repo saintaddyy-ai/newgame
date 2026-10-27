@@ -2,9 +2,20 @@
 import { state, hasItem, giveItem, takeItem } from '../../state.js';
 import { pulse, energy, now, at, day } from './world.js';
 import { addFollowers, feed, quest, questStatus, receive, post, notify } from '../../phone/model.js';
+import { food, clean, remark, lookFactor } from '../../needs.js';
 
 export const F = state.flags;
-export { state, hasItem, giveItem, takeItem, pulse, energy, now, at, day, addFollowers, feed, quest, questStatus, receive, post, notify };
+export { state, hasItem, giveItem, takeItem, pulse, energy, now, at, day, addFollowers, feed, quest, questStatus, receive, post, notify, food, clean, remark };
+
+// Подписчики за то, где видно самого Марка (стрим, фото с ним): помятый вид — меньше
+export function faceFollowers(app, n, reason) {
+  const k = lookFactor();
+  const got = addFollowers(app, Math.round(n * k), k < 1 ? `${reason} · вид помятый` : reason);
+  if (k < 1 && once(`dirty_comment_${day()}`)) {
+    feed(pickOne(['kot_v_sapogah', 'random_user17', 'rap_kritik_95']), pickOne(['он что, неделю не мылся? даже через экран чувствуется', 'тень, ты норм? выглядишь как после трёх смен на складе', 'талант есть, шампуня нет']));
+  }
+  return got;
+}
 
 export const rel = (id, d) => (state.rel[id] = (state.rel[id] || 0) + d);
 export const relOf = (id) => state.rel[id] || 0;
