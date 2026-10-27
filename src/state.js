@@ -35,7 +35,7 @@ function defaults() {
     // Задания: id → { title, status: 'active'|'done'|'failed', note, giver }
     quests: {},
     // Настройки (громкость, озвучка, автотюн)
-    settings: { music: 0.8, sfx: 0.7, voice: true, voiceVol: 1.4, textSpeed: 22, autotune: 'off', headphones: true },
+    settings: { music: 0.8, sfx: 0.7, voice: true, voiceVol: 1.4, textSpeed: 22, autotune: 'off', headphones: true, graphics: 'high', phoneSide: 'right' },
   };
 }
 
@@ -182,7 +182,7 @@ export function hhmm(min) {
 }
 
 // Примерное время в Прологе и Эпизоде 1 (там время идёт фазами)
-const PHASE_CLOCK = { tue: 1170, tue_night: 1430, wed: 620, wed_night: 1420, thu: 660, thu_eve: 1150, final: 1350, outro: 40 };
+export const PHASE_CLOCK = { tue: 1170, tue_night: 1430, wed: 620, wed_night: 1420, thu: 660, thu_eve: 1150, final: 1350, outro: 40 };
 
 export function clockShort() {
   if (state.episode === 'ep2') return hhmm(state.time.min);

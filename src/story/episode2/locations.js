@@ -110,7 +110,7 @@ const yard = {
     { x: 2017, y: 440, r: 120, color: 0xffd27a },
     { x: 2515, y: 212, r: 120, color: 0xffe0a0, cone: true },
   ],
-  critters: () => (isNight() ? [{ type: 'cat', x: 1700, y: 244, depth: 4 }] : [{ type: 'pigeons', x: 1180, n: 5 }, { type: 'cat', x: 1700, y: 244, depth: 4 }]),
+  critters: () => (isNight() ? [{ type: 'cat', x: 1700, y: 266, depth: 4 }] : [{ type: 'pigeons', x: 1180, n: 5 }, { type: 'cat', x: 1700, y: 266, depth: 4 }]),
   photoSpots: [
     { id: 'e2_cover_graffiti', x: 1400, text: 'Граффити «ТЕНЬ» — кадр для обложки' },
     { id: 'e2_swings', x: 760, line: { id: 'e2_photo_swings', text: 'Качели во дворе скрипят, как старая пластинка', tag: 'street' } },

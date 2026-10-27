@@ -5,6 +5,7 @@ import { F, state, giveItem, takeItem, pulse, now, at, day, addFollowers, feed, 
 import { randomSpec, personTexture } from './people.js';
 import { nextDay } from './world.js';
 import { rayServiceOffer } from './girls.js';
+import { addActor } from '../../gfx/actors.js';
 
 export const courierOpen = () => !F.busted && !F.quitRay && (relOf('ray') >= 3 || F.reyLeadgen);
 
@@ -197,7 +198,7 @@ export async function buyerApproach(ctx) {
   const kind = weighted([['buyer', 50], ['haggler', 20], ['scam', 10], ['cop', 15 + Math.max(0, state.heat - 40) / 3], ['friend', 5]]);
   const spec = kind === 'cop' ? { hair: 'short', top: '#4a4a58', glasses: Math.random() < 0.5 } : {};
   const key = personTexture(scene, randomSpec(`buyer_${Date.now()}`, spec));
-  const npc = scene.add.sprite(scene.player.x + 300, 470, `${key}_0`).setOrigin(0.5, 1).setDepth(11);
+  const npc = addActor(scene, scene.player.x + 300, 470, key, { depth: 11 });
   await ctx.walk(npc, scene.player.x + 100, 150);
   npc.setFlipX(true);
   scene.player.setFlipX(false);

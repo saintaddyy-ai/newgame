@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { state } from '../state.js';
 import { sfx } from '../audio.js';
 import { castKey } from '../story/episode2/people.js';
+import { addActor, walk as actorWalk } from '../gfx/actors.js';
 
 const GROUND = 440;
 const FONT = '"PT Mono", monospace';
@@ -31,11 +32,13 @@ export class ChaseScene extends Phaser.Scene {
     this.add.rectangle(0, GROUND, 960, 100, 0x2b2b33).setOrigin(0);
     this.ground = this.add.tileSprite(0, GROUND, 960, 20, this.makeStripes()).setOrigin(0);
 
-    this.mark = this.add.sprite(420, GROUND, 'mark_0').setOrigin(0.5, 1).play('mark_walk');
-    this.mark.anims.timeScale = 2.2;
+    this.mark = addActor(this, 420, GROUND, 'mark');
+    actorWalk(this.mark);
+    this.mark.anims.timeScale = 1.7;
     const cop = castKey(this, 'cop');
-    this.cop = this.add.sprite(420 - this.gap, GROUND, `${cop}_0`).setOrigin(0.5, 1).play(`${cop}_walk`);
-    this.cop.anims.timeScale = 2.2;
+    this.cop = addActor(this, 420 - this.gap, GROUND, cop);
+    actorWalk(this.cop);
+    this.cop.anims.timeScale = 1.7;
     this.siren = this.add.rectangle(0, 0, 960, 540, 0x3a5aff, 0).setOrigin(0).setBlendMode(Phaser.BlendModes.ADD);
     this.tweens.add({ targets: this.siren, fillAlpha: 0.12, duration: 300, yoyo: true, repeat: -1 });
     sfx('siren');

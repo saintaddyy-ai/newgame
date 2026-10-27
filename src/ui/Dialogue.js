@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { blip } from '../audio.js';
 import { state } from '../state.js';
 import { playVoice, stopVoice, splitRemarks } from '../voice.js';
+import { portraitKey } from '../gfx/portraits.js';
+import { SPEAKERS, CAST_SPECS } from '../gfx/cast.js';
 
 const W = 960;
 const BOX_Y = 34;
@@ -25,14 +27,17 @@ const SPEAKER_COLORS = {
   'Лёва': '#ffd166',
 };
 
-// Пиксельные портреты (из фото) — показываются в окне диалога
-const PORTRAITS = {
-  'Рей': 'portrait_ray',
-  'Аркаша': 'portrait_arkasha',
-  'Стас': 'portrait_stas',
-  'Адам': 'portrait_adam',
-  'Рома': 'portrait_roma',
-};
+// Внешность говорящего: именные персонажи — из cast.js, остальные — по спрайту на сцене
+function speakerSpec(scene, name) {
+  const key = SPEAKERS[name];
+  if (key) {
+    const tex = scene.textures.exists(key) ? scene.textures.get(key) : null;
+    return { key, spec: tex?.__spec || CAST_SPECS[key] };
+  }
+  const def = scene.npcDefs?.find((n) => n.name === name && scene.npcs?.[n.id]?.visible) || scene.npcDefs?.find((n) => n.name === name);
+  const tex = def && scene.textures.exists(def.sprite) ? scene.textures.get(def.sprite) : null;
+  return tex?.__spec ? { key: def.sprite, spec: tex.__spec } : null;
+}
 const TEXT_X = 44;
 const TEXT_X_PORTRAIT = 176;
 
@@ -105,15 +110,18 @@ export class Dialogue {
     this.clearChoices();
   }
 
-  setSpeaker(name, color) {
-    // Портрет, если он есть у этого персонажа
-    const tex = PORTRAITS[name];
-    const hasPortrait = !!tex && this.scene.textures.exists(tex);
+  setSpeaker(name, color, emo = 'neutral') {
+    // Портрет говорящего с нужной эмоцией (рисуется при первом показе)
+    const who = name && name !== 'Твой выбор' ? speakerSpec(this.scene, name) : null;
+    const hasPortrait = !!who?.spec;
     this.portrait.setVisible(hasPortrait);
     this.portraitBg.setVisible(hasPortrait);
     if (hasPortrait) {
+      const col = Phaser.Display.Color.HexStringToColor(color || SPEAKER_COLORS[name] || '#ff3d8a').color;
+      const bg = Phaser.Display.Color.Interpolate.ColorWithColor(Phaser.Display.Color.ValueToColor(col), Phaser.Display.Color.ValueToColor(0x15102a), 100, 72);
+      const tex = portraitKey(this.scene, who.key, who.spec, emo, Phaser.Display.Color.GetColor(bg.r, bg.g, bg.b));
       this.portrait.setTexture(tex).setDisplaySize(120, 120);
-      this.portraitBg.setStrokeStyle(2, Phaser.Display.Color.HexStringToColor(SPEAKER_COLORS[name] || '#ff3d8a').color);
+      this.portraitBg.setStrokeStyle(2, col);
     }
     this.body.x = hasPortrait ? TEXT_X_PORTRAIT : TEXT_X;
     this.body.setWordWrapWidth(hasPortrait ? W - 230 : W - 100);
@@ -171,11 +179,13 @@ export class Dialogue {
     this.remark.x = this.nameBg.visible ? this.nameBg.x + this.nameBg.width + 14 : TEXT_X;
   }
 
-  // Эмоция по тексту: крик, грусть, удивление — портрет и говорящий оживают
+  // Эмоция по тексту: крик, грусть, удивление, смех — портрет и говорящий оживают
   emotion(text) {
     if (/[А-ЯЁ]{4,}/.test(text) || (text.match(/!/g) || []).length >= 2) return 'shout';
     if (/\?!|!\?/.test(text)) return 'surprise';
     if (/^…|\.\.\.$|…$/.test(text.trim())) return 'sad';
+    if (/(ха){2}|хах|хех|\)\s*$|кайф|красав|обожаю|люблю/i.test(text)) return 'happy';
+    if (/бля|сука|чёрт|задолбал|заткнись|пошёл|урод/i.test(text)) return 'angry';
     return 'calm';
   }
 
@@ -185,13 +195,11 @@ export class Dialogue {
     this.scene.tweens.killTweensOf(p);
     p.setDisplaySize(120, 120).setPosition(36, BOX_Y + 24).clearTint();
     if (emo === 'shout') {
-      p.setTint(0xffd0c0);
       this.scene.tweens.add({ targets: p, x: { from: 32, to: 40 }, duration: 50, yoyo: true, repeat: 4, onComplete: () => p.setX(36) });
     } else if (emo === 'surprise') {
       this.scene.tweens.add({ targets: p, displayWidth: 128, displayHeight: 128, x: 32, y: BOX_Y + 20, duration: 120, yoyo: true });
     } else if (emo === 'sad') {
-      p.setTint(0xa8b0d0);
-      this.scene.tweens.add({ targets: p, y: BOX_Y + 28, duration: 400 });
+      this.scene.tweens.add({ targets: p, y: BOX_Y + 27, duration: 400 });
     }
   }
 
@@ -199,13 +207,14 @@ export class Dialogue {
   say(name, text, color) {
     if (!this.active) this.open();
     this.clearChoices();
-    this.setSpeaker(name, color);
     const { clean, display, remark } = splitRemarks(text);
+    const emo = this.emotion(clean);
+    const face = { shout: 'shout', surprise: 'surprised', sad: 'sad', happy: 'happy', angry: 'angry' }[emo] || 'neutral';
+    this.setSpeaker(name, color, face);
     this.setRemark(remark);
     this.type(display, { color: '#f2f0ff', fontStyle: 'normal' });
-    const emo = this.emotion(clean);
     this.animatePortrait(emo);
-    if (name) this.onSpeak?.(name, emo);
+    if (name) this.onSpeak?.(name, emo, display);
     if (name) playVoice(name, clean);
     return new Promise((resolve) => (this.onAdvance = resolve));
   }

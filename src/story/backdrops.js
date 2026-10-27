@@ -1,6 +1,10 @@
 // Фоны локаций, нарисованные прямоугольниками в пиксельном стиле.
 // Двери рисуются отдельно (LocationScene.makeDoor), здесь для них только проёмы.
 
+import Phaser from 'phaser';
+import { state } from '../state.js';
+import { paintYard } from '../gfx/places/yard.js';
+
 const FLOOR = 470;
 
 function rng(seed) {
@@ -166,82 +170,13 @@ export function drawApartment(scene, width) {
 }
 
 export function drawYard(scene, width, opts = {}) {
-  // Небо и дальние дома едут медленнее двора — параллакс
-  drawSkyline(scene, width, { seed: 42, groundY: FLOOR - 10, time: opts.time || 'night' }).setScrollFactor(0.5, 1);
-  // Несколько окон вдалеке то гаснут, то загораются — город живой
-  const wr = rng(77);
-  for (let i = 0; i < 10; i++) {
-    const w = scene.add.rectangle(200 + wr() * (width * 0.5 + 600), 200 + wr() * 180, 10, 12, wr() > 0.5 ? 0xffd27a : 0x7a9cff).setScrollFactor(0.5, 1).setAlpha(0);
-    scene.time.addEvent({ delay: 1500 + wr() * 4000, loop: true, callback: () => w.setAlpha(w.alpha > 0.5 ? 0 : 1) });
-  }
-  const g = scene.add.graphics();
-
-  // Наш дом: фасад панельки, из которого выходим
-  g.fillStyle(0x2c2638, 1).fillRect(0, 60, 380, FLOOR - 60);
-  for (let y = 60; y < FLOOR; y += 80) g.fillStyle(0x24202e, 1).fillRect(0, y, 380, 4);
-  for (let x = 0; x < 380; x += 95) g.fillStyle(0x24202e, 1).fillRect(x, 60, 4, FLOOR - 60);
-  const r = rng(5);
-  for (let y = 80; y < 240; y += 80) {
-    for (let x = 20; x < 380; x += 95) {
-      g.fillStyle(r() > 0.6 ? 0xffd27a : 0x15102a, 1).fillRect(x + 14, y + 14, 44, 40);
-      g.fillStyle(0x3a3448, 1).fillRect(x + 34, y + 14, 4, 40);
-    }
-  }
-  // Подъезд: козырёк, дверь, ступени, домофон, лампа
-  g.fillStyle(0x1e1a28, 1).fillRect(90, 258, 130, FLOOR - 258);
-  g.fillStyle(0x4a4a58, 1).fillRect(70, 244, 170, 14);
-  g.fillStyle(0x3a3a48, 1).fillRect(70, 258, 170, 4);
-  g.fillStyle(0x5a5a68, 1).fillRect(80, FLOOR - 16, 150, 8).fillRect(70, FLOOR - 8, 170, 8);
-  g.fillStyle(0xfff0b0, 1).fillRect(144, 230, 22, 12);
-  g.fillStyle(0xfff0b0, 0.1).fillTriangle(155, 242, 60, FLOOR, 250, FLOOR);
-  g.fillStyle(0x6a6a7a, 1).fillRect(232, 330, 16, 26);
-  g.fillStyle(0x3df0ff, 1).fillRect(236, 334, 8, 4);
-  scene.add.text(155, 210, 'ПОДЪЕЗД 3', { fontFamily: '"Press Start 2P"', fontSize: '10px', color: '#c9c4ee' }).setOrigin(0.5);
-
-  // Асфальт и бордюр
-  g.fillStyle(0x2b2b33, 1).fillRect(0, FLOOR - 10, width, 80);
-  g.fillStyle(0x4a4a55, 1).fillRect(380, FLOOR - 14, width - 380, 6);
-  for (let x = 440; x < width; x += 260) g.fillStyle(0x3a3a48, 1).fillRect(x, FLOOR + 30, 90, 8);
-  g.fillStyle(0x3a2a5a, 0.8).fillEllipse(620, FLOOR + 40, 140, 14);
-  g.fillStyle(0xff3d8a, 0.35).fillEllipse(1420, FLOOR + 44, 120, 10);
-
-  // Фонари
-  [520, 1360].forEach((x) => {
-    g.fillStyle(0x1a1a22, 1).fillRect(x, 200, 8, FLOOR - 210).fillRect(x - 20, 200, 36, 6);
-    g.fillStyle(0xffe0a0, 1).fillRect(x - 22, 206, 16, 6);
-    g.fillStyle(0xffe0a0, 0.08).fillTriangle(x - 14, 212, x - 120, FLOOR, x + 90, FLOOR);
-  });
-
-  // Качели — под рост людей
-  g.fillStyle(0xc04040, 1).fillRect(660, 220, 10, 240).fillRect(860, 220, 10, 240).fillRect(660, 214, 210, 10);
-  g.fillStyle(0x8a8a9a, 1).fillRect(724, 224, 2, 170).fillRect(800, 224, 2, 170);
-  g.fillStyle(0xd8b040, 1).fillRect(716, 392, 94, 8);
-
-  // Лавочка
-  g.fillStyle(0x6a4a30, 1).fillRect(950, 410, 170, 12).fillRect(950, 372, 170, 10);
-  g.fillStyle(0x2a2a2a, 1).fillRect(962, 382, 8, 28).fillRect(1100, 382, 8, 28).fillRect(962, 422, 8, 38).fillRect(1100, 422, 8, 38);
-
-  // Стена с граффити
-  g.fillStyle(0x4a4450, 1).fillRect(1250, 280, 300, 180);
-  for (let y = 280; y < 460; y += 20) g.fillStyle(0x3e3844, 1).fillRect(1250, y, 300, 2);
-  scene.graffiti = scene.add.text(1400, 370, 'ТЕНЬ', {
-    fontFamily: '"Press Start 2P"', fontSize: '42px', color: '#3df0ff', stroke: '#ff3d8a', strokeThickness: 8,
-  }).setOrigin(0.5).setAngle(-6);
-  scene.graffiti.setShadow(0, 0, '#3df0ff', 16, true, true);
-
-  // Гаражи — выше человеческого роста
-  for (let x = 1620; x < Math.min(width, 2200) - 40; x += 160) {
-    g.fillStyle(0x3a3f4a, 1).fillRect(x, 250, 154, 210);
-    g.fillStyle(0x2e323c, 1).fillRect(x - 4, 242, 162, 10);
-    g.fillStyle(0x4a505c, 1).fillRect(x + 10, 270, 134, 190);
-    for (let y = 280; y < 460; y += 14) g.fillStyle(0x3e4450, 1).fillRect(x + 10, y, 134, 2);
-  }
-  // Гараж №17 приоткрыт, оттуда свет
-  g.fillStyle(0xffd27a, 0.9).fillRect(1950, 420, 134, 40);
-  g.fillStyle(0xffd27a, 0.12).fillTriangle(1950, 460, 2084, 460, 2017, 530);
-  scene.add.text(2017, 228, '№17', { fontFamily: '"Press Start 2P"', fontSize: '12px', color: '#ffd166' }).setOrigin(0.5);
-  if (width > 2200) drawArch(scene, g, opts);
-  return g;
+  const rain = scene.cfg?.rain;
+  const wet = typeof rain === 'function' ? rain() : !!rain;
+  // Пролог — утро понедельника; в эпизодах время берётся из сюжета/часов
+  const min = state.episode === 'prologue' ? 7 * 60 + 25 : undefined;
+  paintYard(scene, width, { ...opts, wet, min });
+  // Неоновое свечение граффити — им «мигают» сценарии
+  scene.graffiti = scene.add.image(1400, 470 - 14 - 112, 'glow').setTint(0x3df0ff).setBlendMode(Phaser.BlendModes.ADD).setScale(2.4, 0.9).setAlpha(0.22).setDepth(5);
 }
 
 // За гаражами: дом с аркой, через арку видна улица

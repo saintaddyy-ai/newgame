@@ -4,6 +4,7 @@ import { voiced } from '../../voice.js';
 import { BEAT, playMusic, stopMusic } from '../../audio.js';
 import { addContact } from '../../phone/model.js';
 import { F, state, hasItem, takeItem, pulse, now, at, day, addFollowers, feed, quest, rel, relOf, once, post } from './common.js';
+import { addActor } from '../../gfx/actors.js';
 
 const FLOOR = 470;
 
@@ -262,7 +263,7 @@ export async function romaYard(ctx) {
 // ---------- Шоу ----------
 
 async function onStage(ctx, sprite, x = 900) {
-  const s = ctx.scene.add.sprite(x, FLOOR - 50, `${sprite}_0`).setOrigin(0.5, 1).setDepth(9).setScale(1.1);
+  const s = addActor(ctx.scene, x, FLOOR - 50, sprite, { depth: 9, scale: 1.1 });
   s.setAlpha(0);
   ctx.scene.tweens.add({ targets: s, alpha: 1, duration: 400 });
   ctx.scene.tweens.add({ targets: s, y: s.y - 6, duration: 180, yoyo: true, repeat: -1 });

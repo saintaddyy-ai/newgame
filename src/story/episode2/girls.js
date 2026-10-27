@@ -4,6 +4,8 @@ import { voiced } from '../../voice.js';
 import { addContact } from '../../phone/model.js';
 import { F, state, pulse, energy, now, at, day, addFollowers, feed, quest, questStatus, rel, relOf, once, weighted, hasItem, takeItem } from './common.js';
 import { mood } from './world.js';
+import { addActor } from '../../gfx/actors.js';
+import { castKey } from './people.js';
 
 const canDate = () => (F.e2Dates || 0) < 1;
 
@@ -338,7 +340,7 @@ export async function girlArrives(ctx) {
   const name = names[girl];
   sfx('door');
   await d.think(`Звонок в дверь. На пороге — ${name}.`);
-  const g = scene.add.sprite(1800, 470, `cast_${girl}_0`).setOrigin(0.5, 1).setDepth(11);
+  const g = addActor(scene, 1800, 470, castKey(scene, girl), { depth: 11 });
   await ctx.walk(g, 1300, 120);
   // Реакция мамы: веса по характеру девушки, настроению мамы, времени, тому, что она знает, и «Пульсу»
   const w = { warm: 1, awkward: 1, cold: 1, scandal: 0.3 };

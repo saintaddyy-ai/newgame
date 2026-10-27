@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { state, TAGS } from '../state.js';
 import { BEAT, audioCtx, loadBuffer, playBuffer, sfx } from '../audio.js';
 import { karaokeTimeline } from '../demos.js';
+import { addActor, play as actorPlay } from '../gfx/actors.js';
+import { ART } from '../gfx/pix.js';
 
 const FONT = '"PT Mono", monospace';
 const PIXEL = '"Press Start 2P"';
@@ -63,7 +65,8 @@ export class StageScene extends Phaser.Scene {
     // Марк у микрофона
     g.fillStyle(0x2a2a2a, 1).fillRect(504, 200, 5, 100);
     g.fillStyle(0x8a8a9a, 1).fillRect(500, 188, 12, 16);
-    this.mark = this.add.sprite(470, 300, 'mark_0').setOrigin(0.5, 1).setScale(0.85);
+    this.mark = addActor(this, 470, 300, 'mark', { scale: 0.95 });
+    actorPlay(this.mark, 'hype');
     // Толпа: ряды голов, качаются в такт
     this.crowd = [];
     for (let row = 0; row < 3; row++) {
@@ -75,7 +78,7 @@ export class StageScene extends Phaser.Scene {
       }
     }
     if (this.F.e2MomAtShow && this.mode === 'podval') {
-      this.mom = this.add.sprite(860, 470, 'mom_0').setOrigin(0.5, 1).setScale(0.6).setTint(0x8a7aa0);
+      this.mom = addActor(this, 860, 470, 'mom', { scale: 0.7, flip: true }).setTint(0x8a7aa0);
     }
     // Шкала толпы
     this.add.text(30, 22, this.mode === 'stream' ? 'ЗРИТЕЛИ' : 'ТОЛПА', { fontFamily: PIXEL, fontSize: '10px', color: '#ffd166' });
@@ -233,8 +236,8 @@ export class StageScene extends Phaser.Scene {
     if (this.qte) return this.qteTap();
     const t = audioCtx().currentTime - this.t0;
     const n = this.notes.find((x) => x.state === 'wait' && Math.abs(x.t - t) <= WINDOW);
-    this.mark.setScale(0.88, 0.82);
-    this.tweens.add({ targets: this.mark, scaleX: 0.85, scaleY: 0.85, duration: 120 });
+    this.mark.setScale(ART * 0.98, ART * 0.9);
+    this.tweens.add({ targets: this.mark, scaleX: ART * 0.95, scaleY: ART * 0.95, duration: 120 });
     if (!n) {
       this.setHype(this.hype - 0.6);
       return;

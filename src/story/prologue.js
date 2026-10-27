@@ -284,7 +284,7 @@ export const LOCATIONS = {
       { x: 1346, y: 210, r: 120, color: 0xffe0a0, cone: true },
       { x: 2017, y: 440, r: 110, color: 0xffd27a },
     ],
-    critters: [{ type: 'pigeons', x: 560, n: 5 }, { type: 'cat', x: 1700, y: 244, depth: 4 }],
+    critters: [{ type: 'pigeons', x: 560, n: 5 }, { type: 'cat', x: 1700, y: 266, depth: 4 }],
     photoSpots: [
       { id: 'p_graffiti', x: 1400, line: { id: 'photo_tag', text: 'Сфоткал своё имя на стене, чтобы не забыть, что оно моё', tag: 'street' } },
       { id: 'p_swings', x: 760, text: 'Качели под дождём. Скрипят, как старая пластинка.' },

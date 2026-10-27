@@ -10,6 +10,9 @@ import { sfx, startAmbience, stopAmbience, currentMusic, BEAT } from '../audio.j
 import { unreadTotal } from '../phone/model.js';
 import { repaintMark } from '../story/episode2/look.js';
 import * as phoneApi from '../phone/model.js';
+import { addActor, idle, walk, talk, startBlinks, isWalking } from '../gfx/actors.js';
+import { lightSprite } from '../gfx/world.js';
+import { buildDoor, swingDoor } from '../gfx/doors.js';
 
 export const FLOOR = 470;
 const SPEED = 260;
@@ -41,6 +44,10 @@ export class LocationScene extends Phaser.Scene {
     this.lastPrompt = null;
     this.sneaking = false;
     this.zonesFired = new Set();
+    this.autoLights = undefined;
+    this.lightEnv = undefined;
+    this.doorSpots = {};
+    this.__actors = new Set();
     const cfg = this.cfg;
 
     this.cameras.main.setBounds(0, 0, cfg.width, 540);
@@ -59,25 +66,24 @@ export class LocationScene extends Phaser.Scene {
       // dynamic: человек может прийти или уйти, пока Марк здесь (время идёт) — спрайт создаём всегда
       const here = !n.when || n.when();
       if (!here && !n.dynamic) return;
-      const s = this.add.sprite(n.x, FLOOR + (n.dy || 0), `${n.sprite}_0`).setOrigin(0.5, 1).setDepth(n.depth ?? 10);
-      s.setFlipX(!!n.flip);
-      if (n.scale) s.setScale(n.scale);
+      const s = addActor(this, n.x, FLOOR + (n.dy || 0), n.sprite, { flip: !!n.flip, scale: n.scale || 1, depth: n.depth ?? 10 });
       s.setVisible(here);
       this.npcs[n.id] = s;
-      this.tweens.add({ targets: s, scaleY: (n.scale || 1) * 1.015, duration: 1400 + Math.random() * 400, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
     });
 
-    this.player = this.add.sprite(spawnX ?? cfg.spawnX, FLOOR, 'mark_0').setOrigin(0.5, 1).setDepth(20);
-    this.player.setFlipX(facing === 'left');
+    this.player = addActor(this, spawnX ?? cfg.spawnX, FLOOR, 'mark', { depth: 20, flip: facing === 'left' });
+    this.blinks = startBlinks(this, () => [this.player, ...Object.values(this.npcs)]);
     this.cameras.main.startFollow(this.player, true, 0.12, 0.12, 0, 40);
 
     if (cfg.foreground) cfg.foreground(this);
     if (val(cfg.rain)) this.makeRain();
     // Ночь — синее затемнение поверх мира, свет ламп остаётся
     const night = val(cfg.night);
-    this.isNight = !!night;
-    if (night) this.add.rectangle(0, 0, cfg.width, 540, 0x0a0824, night === true ? 0.42 : night).setOrigin(0).setDepth(30);
-    this.makeLights(val(cfg.lamps) || [], !!night);
+    this.isNight = !!night || (this.lightEnv?.dark ?? 0) > 0.5;
+    // Новые фоны уже нарисованы под время суток; старым — синее затемнение
+    if (night && !this.lightEnv) this.add.rectangle(0, 0, cfg.width, 540, 0x0a0824, night === true ? 0.42 : night).setOrigin(0).setDepth(30);
+    this.makeLights(this.autoLights ?? (val(cfg.lamps) || []), !!night || (this.lightEnv?.dark ?? 0) > 0.3);
+    this.makeShadows();
     this.makeCritters(val(cfg.critters) || []);
     this.acidFx = null;
 
@@ -97,21 +103,18 @@ export class LocationScene extends Phaser.Scene {
     this.tweens.add({ targets: title, alpha: 1, duration: 600, hold: 1600, yoyo: true });
 
     this.dialogue = new Dialogue(this);
-    // Тот, кто говорит, чуть подпрыгивает — видно, чья реплика; на крик — сильнее
-    this.dialogue.onSpeak = (name, emo) => {
+    // Тот, кто говорит, жестикулирует и шевелит губами; на крик — ещё и вздрагивает
+    this.dialogue.onSpeak = (name, emo, text = '') => {
       const def = this.npcDefs.find((n) => n.name === name && this.npcs[n.id]?.visible);
       const spr = def ? this.npcs[def.id] : name === 'Марк' ? this.player : null;
-      if (!spr || spr.__hop) return;
-      spr.__hop = true;
-      const h = emo === 'shout' ? 14 : 6;
-      const y0 = spr.y;
-      this.tweens.add({
-        targets: spr, y: y0 - h, duration: emo === 'shout' ? 70 : 110, yoyo: true, repeat: emo === 'shout' ? 2 : 0,
-        onComplete: () => {
-          spr.y = y0;
-          spr.__hop = false;
-        },
-      });
+      if (!spr || isWalking(spr)) return;
+      talk(spr);
+      spr.__talkUntil = this.time.now + Math.min(3200, 500 + text.length * 38);
+      if (emo === 'shout' && !spr.__hop) {
+        spr.__hop = true;
+        const y0 = spr.y;
+        this.tweens.add({ targets: spr, y: y0 - 6, duration: 70, yoyo: true, repeat: 2, onComplete: () => { spr.y = y0; spr.__hop = false; } });
+      }
     };
     this.notebook = new Notebook(this);
     this.notebook.onUse = (id) => {
@@ -196,8 +199,7 @@ export class LocationScene extends Phaser.Scene {
     if (this.phone.open) this.phone.hide(true);
     this.busy = true;
     this.prompt.setVisible(false);
-    this.player.anims.stop();
-    this.player.setTexture('mark_0');
+    idle(this.player);
     try {
       await fn(this.ctx);
     } catch (e) {
@@ -249,7 +251,7 @@ export class LocationScene extends Phaser.Scene {
     if (!it) return;
     sfx(it.sfx || 'click');
     // Маленькая вспышка на месте предмета — отклик на каждое действие
-    this.fx.ping(it.x, it.npc ? FLOOR - 120 : (it.y ?? FLOOR - 190) + 40);
+    this.fx.ping(it.x, it.npc ? FLOOR - 100 : (it.y ?? FLOOR - 160) + 40);
     if (it.npc) {
       // Отходим на шаг, чтобы не стоять внутри собеседника
       const side = this.player.x < it.npc.x ? -1 : 1;
@@ -263,11 +265,19 @@ export class LocationScene extends Phaser.Scene {
 
   update(time, dt) {
     const free = !this.busy && !this.pc.open && !this.phone.open;
+    // Договорил — снова просто стоит
+    [this.player, ...Object.values(this.npcs)].forEach((s) => {
+      if (s.__talkUntil && time > s.__talkUntil) {
+        s.__talkUntil = 0;
+        if ((s.anims.currentAnim?.key || '').endsWith('@talk')) idle(s);
+      }
+    });
     this.hud.setVisible(!this.busy && !this.pc.open);
     this.phoneBtn.setVisible(!this.busy && !this.pc.open && !this.phone.open);
     this.info.setVisible(state.episode !== 'prologue' && !this.busy && !this.pc.open);
     this.heatBar?.setVisible(free && state.flags.courierActive);
     this.updateDoors();
+    this.updateActorsLight();
     this.pulseToBeat();
     this.cfg.tick?.(this, dt);
     if (!this.busy) this.phone.flushQueue();
@@ -283,8 +293,7 @@ export class LocationScene extends Phaser.Scene {
       const speed = this.sneaking ? SNEAK_SPEED : SPEED;
       this.player.x = Phaser.Math.Clamp(this.player.x + dir * speed * (dt / 1000), 40, this.cfg.width - 40);
       this.player.setFlipX(dir < 0);
-      if (!this.player.anims.isPlaying) this.player.play('mark_walk');
-      this.player.anims.timeScale = this.sneaking ? 0.5 : 1;
+      walk(this.player, this.sneaking);
       this.stepTimer -= dt;
       if (this.stepTimer <= 0) {
         // Крадучись — шагов не слышно
@@ -292,9 +301,8 @@ export class LocationScene extends Phaser.Scene {
         this.stepTimer = this.sneaking ? STEP_EVERY * 1.8 : STEP_EVERY;
         if (val(this.cfg.rain)) this.fx.splash(this.player.x, FLOOR);
       }
-    } else if (this.player.anims.isPlaying) {
-      this.player.anims.stop();
-      this.player.setTexture('mark_0');
+    } else if (isWalking(this.player)) {
+      idle(this.player);
       this.stepTimer = 0;
     }
     this.updateCritters();
@@ -304,7 +312,7 @@ export class LocationScene extends Phaser.Scene {
     const key = it ? it.key || `${it.label}@${it.x}` : null;
     if (it) {
       if (this.lastPrompt !== key) sfx('prompt');
-      const top = it.npc ? it.npc.y - it.npc.height - 24 : FLOOR - 190;
+      const top = it.npc ? it.npc.y - it.npc.displayHeight * 0.8 - 14 : FLOOR - 160;
       this.prompt.setVisible(true);
       this.prompt.x = it.x - 14;
       this.prompt.y = it.y ?? top;
@@ -339,11 +347,10 @@ export class LocationScene extends Phaser.Scene {
   setSneak(on) {
     if (on === this.sneaking) return;
     this.sneaking = on;
-    this.player.setScale(1, on ? 0.94 : 1);
-    this.player.setTint(on ? 0x9a96c8 : 0xffffff);
+    if (this.player.anims.isPlaying) walk(this.player, on);
     if (on && !this.sneakHint) {
       this.sneakHint = true;
-      const t = this.add.text(this.player.x, this.player.y - 180, 'тсс…', {
+      const t = this.add.text(this.player.x, this.player.y - 150, 'тсс…', {
         fontFamily: '"PT Mono", monospace', fontSize: '16px', color: '#c9c4ee', fontStyle: 'italic', stroke: '#0c0a16', strokeThickness: 4,
       }).setOrigin(0.5).setDepth(900);
       this.tweens.add({ targets: t, y: t.y - 30, alpha: 0, duration: 1200, onComplete: () => t.destroy() });
@@ -361,8 +368,7 @@ export class LocationScene extends Phaser.Scene {
       if (z.when && !z.when()) continue;
       if (z.sneak && this.sneaking) continue;
       this.zonesFired.add(z.id);
-      this.player.anims.stop();
-      this.player.setTexture('mark_0');
+      idle(this.player);
       this.setSneak(false);
       this.runScript(z.run, { cost: z.cost || 0 });
       return true;
@@ -373,50 +379,17 @@ export class LocationScene extends Phaser.Scene {
   // ---------- Двери ----------
 
   makeDoor(d) {
-    const h = d.h || 200;
-    const w = d.w || 76;
-    const top = FLOOR - h;
-    const c = this.add.container(d.x - w / 2, top).setDepth(5);
-    const parts = [];
-    if (d.interior) {
-      // Межкомнатная дверь: светлый наличник, за створкой видна соседняя комната, на полу порожек
-      parts.push(this.add.rectangle(-8, -10, w + 16, h + 10, 0x9a7650).setOrigin(0));
-      parts.push(this.add.rectangle(-8, -10, w + 16, 4, 0xb89068).setOrigin(0));
-      parts.push(this.add.rectangle(0, 0, w, h, d.inside ?? 0x4f4766).setOrigin(0));
-      parts.push(this.add.rectangle(0, h * 0.55, w, h * 0.45, Phaser.Display.Color.ValueToColor(d.inside ?? 0x4f4766).lighten(8).color).setOrigin(0));
-      parts.push(this.add.rectangle(0, h - 14, w, 14, d.insideFloor ?? 0x3a2c24).setOrigin(0));
-      parts.push(this.add.rectangle(-4, h - 4, w + 8, 4, 0xb89068).setOrigin(0));
-    } else {
-      parts.push(this.add.rectangle(-5, -5, w + 10, h + 5, d.frame ?? 0x1e1626).setOrigin(0));
-      parts.push(this.add.rectangle(0, 0, w, h, 0x0c0a12).setOrigin(0));
-    }
-    const panel = this.add.container(0, 0);
-    const color = d.color ?? 0x5a3a2a;
-    const dark = Phaser.Display.Color.ValueToColor(color).darken(15).color;
-    panel.add(this.add.rectangle(0, 0, w, h, color).setOrigin(0));
-    if (d.metal) {
-      for (let y = 8; y < h; y += 14) panel.add(this.add.rectangle(4, y, w - 8, 2, dark).setOrigin(0));
-    } else {
-      panel.add(this.add.rectangle(8, 12, w - 16, h * 0.36, dark).setOrigin(0));
-      panel.add(this.add.rectangle(8, h * 0.5, w - 16, h * 0.42, dark).setOrigin(0));
-      panel.add(this.add.rectangle(w - 14, h * 0.5, 8, 8, 0xd8b040).setOrigin(0));
-    }
-    // Тень на створке — когда дверь повёрнута к нам, она темнее
-    const shade = this.add.rectangle(0, 0, w, h, 0x000000, 1).setOrigin(0).setAlpha(0);
-    panel.add(shade);
-    c.add([...parts, panel]);
-    return { ...d, c, panel, shade, w, open: false };
+    // Геометрию двери (низ проёма, вид, что за ней) задаёт фон локации
+    const spot = this.doorSpots?.[d.id] || {};
+    return buildDoor(this, { ...d, ...spot }, { bottom: spot.bottom ?? FLOOR - 6, dark: this.lightEnv?.dark ?? 0 });
   }
 
   setDoor(door, open, silent = false) {
     if (!door || door.open === open) return;
     door.open = open;
-    if (!silent) sfx(open ? (door.metal ? 'gate' : 'door') : door.interior ? 'doorSoft' : 'doorClose');
-    this.tweens.killTweensOf(door.panel);
-    // Створка «поворачивается» к нам — сжимаем по ширине
-    this.tweens.add({ targets: door.panel, scaleX: open ? 0.14 : 1, duration: open ? 260 : 200, ease: open ? 'Cubic.out' : 'Cubic.in' });
-    this.tweens.add({ targets: door.shade, alpha: open ? 0.45 : 0, duration: open ? 260 : 200 });
-    if (!open && !door.interior) this.cameras.main.shake(80, 0.002);
+    if (!silent) sfx(open ? (door.kind === 'gate' ? 'gate' : 'door') : door.kind === 'interior' || door.kind === 'bath' ? 'doorSoft' : 'doorClose');
+    swingDoor(this, door, open, open ? 280 : 220);
+    if (!open && !door.interior && door.kind !== 'bath') this.time.delayedCall(220, () => this.cameras.main.shake(80, 0.002));
   }
 
   // Межкомнатные двери открываются сами, когда к ним подходит кто угодно
@@ -431,6 +404,59 @@ export class LocationScene extends Phaser.Scene {
   }
 
   // ---------- Свет, живность, фото ----------
+
+  // Тени под ногами у всех персонажей
+  makeShadows() {
+    if (!this.textures.exists('shadow')) {
+      const g = this.make.graphics({ x: 0, y: 0 }, false);
+      g.fillStyle(0x07060d, 0.55).fillEllipse(24, 6, 48, 12);
+      g.fillStyle(0x07060d, 0.35).fillEllipse(24, 6, 34, 8);
+      g.generateTexture('shadow', 48, 12);
+      g.destroy();
+    }
+    this.shadows = new Map();
+  }
+
+  shadowOf(s) {
+    let sh = this.shadows.get(s);
+    if (!sh) {
+      sh = this.add.image(s.x, s.y, 'shadow').setDepth((s.depth || 10) - 0.5).setScale(1.1, 1);
+      this.shadows.set(s, sh);
+    }
+    return sh;
+  }
+
+  // Подсветка персонажей от ламп + тени (вытягиваются от ближайшего фонаря)
+  updateActorsLight() {
+    const lights = this.lightEnv?.lights || [];
+    this.shadows.forEach((sh, s) => {
+      if (!s.active) {
+        sh.destroy();
+        this.shadows.delete(s);
+      }
+    });
+    this.__actors.forEach((s) => {
+      if (!s?.active) return;
+      lightSprite(this, s);
+      const sh = this.shadowOf(s);
+      sh.setVisible(s.visible && s.alpha > 0.5);
+      if (!sh.visible) return;
+      const sc = s.scaleX / 2;
+      sh.x = s.x;
+      sh.y = s.y - 2;
+      let lean = 0;
+      if (this.lightEnv?.dark > 0.3) {
+        let best = null;
+        lights.forEach((L) => {
+          const d = Math.abs(L.x - s.x);
+          if (d < L.r * 1.2 && (!best || d < Math.abs(best.x - s.x))) best = L;
+        });
+        if (best) lean = Phaser.Math.Clamp((s.x - best.x) / 3, -40, 40);
+      }
+      sh.x += lean * 0.5;
+      sh.setScale((1.05 + Math.abs(lean) / 40) * sc, sc);
+    });
+  }
 
   // Фонари и окна светятся поверх ночного затемнения
   makeLights(lamps, night) {
@@ -624,16 +650,16 @@ export class LocationScene extends Phaser.Scene {
 
   walkTo(sprite, x, speed) {
     return new Promise((resolve) => {
-      const key = sprite.texture.key.replace(/_\d$/, '');
       sprite.setFlipX(x < sprite.x);
-      sprite.play(`${key}_walk`);
+      walk(sprite);
+      // Темп шага под скорость: медленно идущий не «бежит на месте»
+      sprite.anims.timeScale = Math.max(0.5, Math.min(1.4, speed / 180));
       this.tweens.add({
         targets: sprite,
         x,
         duration: (Math.abs(x - sprite.x) / speed) * 1000,
         onComplete: () => {
-          sprite.anims.stop();
-          sprite.setTexture(`${key}_0`);
+          idle(sprite);
           resolve();
         },
       });
@@ -841,10 +867,10 @@ export class LocationScene extends Phaser.Scene {
       }).setScrollFactor(0).setDepth(880);
       // След-призрак за героем
       this.acidTrail = this.time.addEvent({ delay: 110, loop: true, callback: () => {
-        if (!this.player.anims.isPlaying) return;
-        const g = this.add.image(this.player.x, this.player.y, this.player.texture.key).setOrigin(0.5, 1).setDepth(19)
+        if (!isWalking(this.player)) return;
+        const g = this.add.image(this.player.x, this.player.y, this.player.texture.key, this.player.frame.name).setOrigin(0.5, 1).setDepth(19).setScale(this.player.scaleX, this.player.scaleY)
           .setFlipX(this.player.flipX).setTint(Phaser.Utils.Array.GetRandom([0xff3d8a, 0x3df0ff, 0xffd166])).setAlpha(0.45).setBlendMode(Phaser.BlendModes.ADD);
-        this.tweens.add({ targets: g, alpha: 0, scaleX: 1.15, duration: 520, onComplete: () => g.destroy() });
+        this.tweens.add({ targets: g, alpha: 0, scaleX: g.scaleX * 1.15, duration: 520, onComplete: () => g.destroy() });
       } });
     } else if (!on && this.acidFx) {
       this.acidTween?.stop();

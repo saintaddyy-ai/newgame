@@ -9,6 +9,7 @@ import { drawApartment, drawYard, drawGarage, drawWarehouse, drawPawnshop, drawF
 import { BATHROOM } from './shared.js';
 import { posterView } from './prologue.js';
 import { BEAT, playMusic, stopMusic, sfx } from '../audio.js';
+import { addActor } from '../gfx/actors.js';
 
 const F = state.flags;
 const FLOOR = 470;
@@ -222,7 +223,7 @@ export const LOCATIONS = {
       barberSign: ['thu', 'thu_eve', 'final', 'outro'].includes(phase()),
     }),
     lamps: YARD_LAMPS,
-    critters: () => (isDay() ? [{ type: 'pigeons', x: 1180, n: 4 }, { type: 'cat', x: 1700, y: 244, depth: 4 }] : [{ type: 'cat', x: 1700, y: 244, depth: 4 }]),
+    critters: () => (isDay() ? [{ type: 'pigeons', x: 1180, n: 4 }, { type: 'cat', x: 1700, y: 266, depth: 4 }] : [{ type: 'cat', x: 1700, y: 266, depth: 4 }]),
     photoSpots: YARD_PHOTOS,
     doors: [{ id: 'entrance', x: 155, w: 126, h: 208, color: 0x3a4658 }],
 
@@ -287,7 +288,7 @@ export const LOCATIONS = {
         },
       },
       {
-        x: 1700, y: 200, label: 'Кот на гараже', range: 50, sfx: 'meow',
+        x: 1700, y: 236, label: 'Кот на гараже', range: 50, sfx: 'meow',
         async use({ d, line }) {
           if (F.catPet) return d.think('Кот смотрит сверху вниз. Как критик.');
           F.catPet = true;
@@ -648,7 +649,7 @@ async function rayRage({ d, scene, walk, wait, fx, sfx: play }) {
   await d.say('Рей', 'Твой Дэн биты с ютуба тырит. Ваш гараж воняет бабкиными коврами. Ваш двор — пайка, ваш район — пайка, ваш рэп — пайка в квадрате!');
   d.close();
   // Мимо идёт пацан с мячом
-  const kid = scene.add.sprite(scene.player.x - 300, FLOOR, 'kid_0').setOrigin(0.5, 1).setDepth(10);
+  const kid = addActor(scene, scene.player.x - 300, FLOOR, 'kid', { depth: 10 });
   await walk(kid, scene.player.x - 140, 110);
   await d.say('Рей', '…Щас распогодимся.');
   play('ball');
@@ -1051,7 +1052,7 @@ async function afterShift({ d, npc, walk, wait, cash, line, goal, card, go, fx, 
     line({ id: 'warehouse', text: 'Склад глотает мечты по сорок коробок за смену', tag: 'pain' });
     // Рей подъезжает к воротам
     F.rayAtWarehouse = true;
-    const ray = scene.add.sprite(1560, FLOOR, 'ray_0').setOrigin(0.5, 1).setDepth(10).setFlipX(true);
+    const ray = addActor(scene, 1560, FLOOR, 'ray', { depth: 10, flip: true });
     await walk(ray, 1400, 140);
     await d.say('Рей', 'Братик! Ты тут коробки таскаешь? Пайка какая… Рей в этой малашечке, если что.');
     await d.think('Рей что-то передаёт Палычу через окошко. Палыч быстро прячет это в карман жилета.');
@@ -1470,7 +1471,7 @@ async function afterRehearsal({ d, acid, goal, npc, scene, wait }) {
 async function outro({ d, npc, walk, wait, fx, scene, sfx: play, line, item, go }) {
   const p = scene.player;
   // Аркаша клеит стикеры на гаражи
-  const ark = scene.add.sprite(2190, FLOOR, 'arkasha_0').setOrigin(0.5, 1).setDepth(10).setFlipX(true);
+  const ark = addActor(scene, 2190, FLOOR, 'arkasha', { depth: 10, flip: true });
   await wait(500);
   await walk(p, 2090, 150);
   p.setFlipX(false);

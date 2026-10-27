@@ -4,6 +4,7 @@ import { F, state, pulse, energy, now, day, addFollowers, feed, once, pickOne, w
 import { workerHello, workerMood } from './workers.js';
 import { randomSpec, personTexture } from './people.js';
 import { repaintMark, OUTFITS } from './look.js';
+import { addActor, walk as actorWalk } from '../../gfx/actors.js';
 
 // ---------- Работники кафе ----------
 
@@ -249,10 +250,11 @@ export function ambientWalkers(scene, width, n = 3) {
   for (let i = 0; i < n; i++) {
     scene.time.delayedCall(800 + i * 2600, function walk() {
       if (!scene.scene.isActive()) return;
-      const key = personTexture(scene, randomSpec(`amb_${Math.random()}`));
+      const key = personTexture(scene, randomSpec(`amb_${Math.floor(Math.random() * 40)}`), null, 'crowd');
       const dir = Math.random() < 0.5 ? 1 : -1;
-      const s = scene.add.sprite(dir > 0 ? -60 : width + 60, 470, `${key}_0`).setOrigin(0.5, 1).setDepth(9).setAlpha(0.9).setScale(0.92);
-      s.setFlipX(dir < 0).play(`${key}_walk`);
+      const s = addActor(scene, dir > 0 ? -60 : width + 60, 470, key, { depth: 9, scale: 0.96, flip: dir < 0 }).setAlpha(0.95);
+      actorWalk(s);
+      s.anims.timeScale = 0.8;
       scene.tweens.add({
         targets: s, x: dir > 0 ? width + 60 : -60, duration: (width + 120) * (8 + Math.random() * 4),
         onComplete: () => {
